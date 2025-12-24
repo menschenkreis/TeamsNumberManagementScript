@@ -1,4 +1,4 @@
-# Teams Phone Manager v56.4
+# Teams Phone Manager
 
 **Teams Phone Manager** is a comprehensive GUI-based PowerShell tool designed to streamline the management of Microsoft Teams Phone numbers. It integrates directly with the **Orange Business Talk (OC)** API to synchronize inventory status between Microsoft Teams and the Orange Cloud.
 
