@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Settings>
+  <OrangeCustomerID></OrangeCustomerID>
+  <OrangeAuthHeader></OrangeAuthHeader>
+  <OrangeApiKey></OrangeApiKey>
+  <Proxy>
+  </Proxy>
+  <SelectTagList>TEST1,TEST2</SelectTagList>
+  <LowStockAlertThreshold>5</LowStockAlertThreshold>
+</Settings>
