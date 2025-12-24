@@ -1072,10 +1072,264 @@ $btnConnect.Add_Click({
     }
 })
 
+# --- HELPER FUNCTIONS FOR DATA FETCHING ---
+
+function Get-TeamsVoicePolicies {
+    <#
+    .SYNOPSIS
+        Fetches and caches voice routing and Teams meeting policies.
+    .DESCRIPTION
+        Retrieves policies from Teams and stores them in global variables.
+        Handles errors gracefully by returning empty arrays on failure.
+    #>
+    try {
+        Write-Log "  > Fetching Voice Routing Policies..."
+        $policies = Get-CsOnlineVoiceRoutingPolicy -ErrorAction Stop
+        $global:voiceRoutingPolicies = $policies | Select-Object -ExpandProperty Identity
+
+        Write-Log "  > Fetching Teams Meeting Policies..."
+        $tmPolicies = Get-CsTeamsMeetingPolicy -ErrorAction Stop
+        $global:teamsMeetingPolicies = $tmPolicies | Select-Object -ExpandProperty Identity | Sort-Object
+
+        Write-Log "  > Cached $($global:voiceRoutingPolicies.Count) voice policies and $($global:teamsMeetingPolicies.Count) meeting policies."
+    } catch {
+        Write-Log "  > Warning: Failed to fetch policies. ($($_.Exception.Message))"
+        $global:voiceRoutingPolicies = @()
+        $global:teamsMeetingPolicies = @()
+    }
+}
+
+function Get-TeamsUsersIndexed {
+    <#
+    .SYNOPSIS
+        Fetches Teams users and builds an indexed lookup table.
+    .DESCRIPTION
+        Retrieves up to 20000 users and creates a hashtable indexed by Identity for fast lookups.
+    .OUTPUTS
+        System.Collections.ArrayList - Collection of user objects
+    #>
+    Write-Log "  > Found users. Building Index..."
+    $users = Get-CsOnlineUser -ResultSize 20000 -ErrorAction Stop
+
+    Write-Log "  > Found $($users.Count) users. Building Index..."
+    $global:teamsUsersMap = @{}
+    foreach ($u in $users) {
+        if ($u.Identity) {
+            $global:teamsUsersMap[$u.Identity] = $u
+        }
+    }
+
+    return $users
+}
+
+function Get-PhoneNumbersBatched {
+    <#
+    .SYNOPSIS
+        Fetches phone numbers in batches with progress tracking.
+    .DESCRIPTION
+        Retrieves phone number assignments in batches of 1000, up to 10000 total.
+        Updates progress UI during the fetch operation.
+    .OUTPUTS
+        System.Collections.ArrayList - Collection of phone number objects
+    #>
+    $allNumbers = New-Object System.Collections.ArrayList
+    $batchSize = 1000
+    $skip = 0
+
+    while ($skip -lt 10000) {
+        Write-Debug "Executing: Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize"
+        $batch = Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize -ErrorAction Stop
+        if (!$batch) { break }
+
+        [void]$allNumbers.AddRange($batch)
+        $skip += $batchSize
+        Write-Log "  > Fetched batch. Total so far: $($allNumbers.Count)"
+        Update-ProgressUI -Current (30 + ($skip/200)) -Total 100 -Activity "Fetching Numbers ($($allNumbers.Count))"
+
+        if ($batch.Count -lt $batchSize) { break }
+    }
+
+    return $allNumbers
+}
+
+function Build-TeamsDataTable {
+    <#
+    .SYNOPSIS
+        Builds a DataTable from phone numbers and user information.
+    .DESCRIPTION
+        Creates a DataTable with predefined columns and populates it with phone number
+        and associated user data. Uses the global teamsUsersMap for user lookups.
+    .PARAMETER PhoneNumbers
+        Collection of phone number objects from Get-CsPhoneNumberAssignment
+    .OUTPUTS
+        System.Data.DataTable - Populated data table
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [System.Collections.ArrayList]$PhoneNumbers
+    )
+
+    $dataTable = New-Object System.Data.DataTable
+    foreach ($c in $global:tableColumns) {
+        $col = New-Object System.Data.DataColumn $c, ([System.String])
+        $dataTable.Columns.Add($col)
+    }
+
+    foreach ($num in $PhoneNumbers) {
+        $row = $dataTable.NewRow()
+        $row["TelephoneNumber"] = $num.TelephoneNumber
+        $row["NumberType"] = $num.NumberType
+        $row["ActivationState"] = $num.ActivationState
+        $row["City"] = $num.City
+        $row["IsoCountryCode"] = $num.IsoCountryCode
+        $row["IsoSubdivision"] = $num.IsoSubdivision
+        $row["NumberSource"] = $num.NumberSource
+        $row["Tag"] = if ($num.Tag) { $num.Tag -join ", " } else { "" }
+
+        $userId = $num.AssignedPstnTargetId
+        if ($userId -and $global:teamsUsersMap.ContainsKey($userId)) {
+            $u = $global:teamsUsersMap[$userId]
+            $row["UserPrincipalName"] = $u.UserPrincipalName
+            $row["DisplayName"] = $u.DisplayName
+            $row["OnlineVoiceRoutingPolicy"] = $u.OnlineVoiceRoutingPolicy
+            $row["EnterpriseVoiceEnabled"] = $u.EnterpriseVoiceEnabled
+
+            # Populate optional columns if they exist
+            if ($global:tableColumns -contains "AccountEnabled") { $row["AccountEnabled"] = $u.AccountEnabled }
+            if ($global:tableColumns -contains "PreferredDataLocation") { $row["PreferredDataLocation"] = $u.PreferredDataLocation }
+            if ($global:tableColumns -contains "UsageLocation") { $row["UsageLocation"] = $u.UsageLocation }
+            if ($global:tableColumns -contains "TeamsMeetingPolicy") { $row["TeamsMeetingPolicy"] = $u.TeamsMeetingPolicy }
+
+            if ($global:tableColumns -contains "FeatureTypes") {
+                if ($u.FeatureTypes -and $u.FeatureTypes -is [Array]) {
+                    $row["FeatureTypes"] = $u.FeatureTypes -join ", "
+                } else {
+                    $row["FeatureTypes"] = $u.FeatureTypes
+                }
+            }
+        }
+        [void]$dataTable.Rows.Add($row)
+    }
+
+    return $dataTable
+}
+
+function Get-OrangeSiteInfo {
+    <#
+    .SYNOPSIS
+        Extracts Orange voice site information from an Orange number object.
+    .DESCRIPTION
+        Handles different object types and property access patterns for Orange voiceSite data.
+    .PARAMETER OrangeObject
+        The Orange number object containing voiceSite information
+    .OUTPUTS
+        Hashtable with SiteName and SiteId properties
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        $OrangeObject
+    )
+
+    $siteName = ""
+    $siteId = ""
+    $vs = $OrangeObject.voiceSite
+
+    if ($null -ne $vs) {
+        $siteId = $vs.voiceSiteId
+        $siteName = $vs.technicalSiteName
+
+        # Fallback for dictionary-type objects
+        if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) {
+            $siteId = $vs['voiceSiteId']
+            $siteName = $vs['technicalSiteName']
+        }
+    }
+
+    return @{
+        SiteName = $siteName
+        SiteId = $siteId
+    }
+}
+
+function Merge-OrangeDataIntoTable {
+    <#
+    .SYNOPSIS
+        Merges Orange cloud number data into the Teams data table.
+    .DESCRIPTION
+        Updates existing rows with Orange data and adds new rows for Orange-only numbers.
+        Updates the global orangeHistoryMap with history information.
+    .PARAMETER DataTable
+        The DataTable to merge Orange data into
+    .PARAMETER OrangeData
+        Collection of Orange number objects
+    .PARAMETER ProgressStartPercent
+        Starting percentage for progress UI (default 60)
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [System.Data.DataTable]$DataTable,
+
+        [Parameter(Mandatory=$true)]
+        $OrangeData,
+
+        [Parameter(Mandatory=$false)]
+        [int]$ProgressStartPercent = 60
+    )
+
+    Write-Log "  > Merging datasets..."
+
+    # Build Orange index and history map
+    $global:orangeHistoryMap = @{}
+    $orangeIndex = @{}
+    foreach ($oNum in $OrangeData) {
+        $key = [string]$oNum.number.Replace("+","").Trim()
+        $orangeIndex[$key] = $oNum
+        $global:orangeHistoryMap["+" + $key] = $oNum.history
+    }
+
+    $processedKeys = @{}
+
+    # Update existing rows with Orange data
+    for ($i = 0; $i -lt $DataTable.Rows.Count; $i++) {
+        $row = $DataTable.Rows[$i]
+        $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
+
+        if ($orangeIndex.ContainsKey($tKey)) {
+            $oObj = $orangeIndex[$tKey]
+            $siteInfo = Get-OrangeSiteInfo -OrangeObject $oObj
+
+            $row["OrangeSite"] = $siteInfo.SiteName
+            $row["OrangeSiteId"] = $siteInfo.SiteId
+            $row["OrangeStatus"] = $oObj.status
+            $row["OrangeUsage"] = $oObj.usage
+            $processedKeys[$tKey] = $true
+        }
+
+        if ($i % 200 -eq 0) {
+            Update-ProgressUI -Current ($ProgressStartPercent + (($i / $DataTable.Rows.Count) * 30)) -Total 100 -Activity "Merging Data ($i/$($DataTable.Rows.Count))"
+        }
+    }
+
+    # Add Orange-only numbers (not in Teams)
+    Write-Log "  > Adding Orange-only numbers..."
+    $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }
+    foreach ($key in $missing) {
+        $oObj = $orangeIndex[$key]
+        $row = $DataTable.NewRow()
+        $row["TelephoneNumber"] = "+" + $key
+
+        $siteInfo = Get-OrangeSiteInfo -OrangeObject $oObj
+        $row["OrangeSite"] = $siteInfo.SiteName
+        $row["OrangeSiteId"] = $siteInfo.SiteId
+        $row["OrangeStatus"] = $oObj.status
+        $row["OrangeUsage"] = $oObj.usage
+
+        $DataTable.Rows.Add($row)
+    }
+}
+
 # --- COMBINED FETCH LOGIC ---
 $btnFetchData.Add_Click({
-    # LOGIC UPDATE: We removed the blocking validation here.
-    # We will check if Orange is enabled dynamically.
     $orangeEnabled = -not [string]::IsNullOrWhiteSpace($global:txtOrangeKey.Text)
 
     try {
@@ -1084,95 +1338,31 @@ $btnFetchData.Add_Click({
         Reset-ProgressUI
         Write-Log "--- STARTING DATA RETRIEVAL ---"
 
-        # 0. PRE-FETCH POLICIES
+        # Step 1: Fetch Policies
         Write-Log "Step 1/5: Caching Policies..."
         Update-ProgressUI -Current 10 -Total 100 -Activity "Fetch Policies"
-        try {
-            # Voice Routing Policies
-            Write-Log "  > Fetching Voice Routing Policies..."
-            $policies = Get-CsOnlineVoiceRoutingPolicy -ErrorAction Stop
-            $global:voiceRoutingPolicies = $policies | Select-Object -ExpandProperty Identity
-            
-            # NEW: Teams Meeting Policies
-            Write-Log "  > Fetching Teams Meeting Policies..."
-            $tmPolicies = Get-CsTeamsMeetingPolicy -ErrorAction Stop
-            $global:teamsMeetingPolicies = $tmPolicies | Select-Object -ExpandProperty Identity | Sort-Object
-            
-            Write-Log "  > Cached $($global:voiceRoutingPolicies.Count) voice policies and $($global:teamsMeetingPolicies.Count) meeting policies."
-        } catch { Write-Log "  > Warning: Failed to fetch policies. ($($_.Exception.Message))"; $global:voiceRoutingPolicies = @(); $global:teamsMeetingPolicies = @() }
+        Get-TeamsVoicePolicies
 
-        # 1. GET USERS
+        # Step 2: Fetch Users
         Write-Log "Step 2/5: Fetching Teams Users..."
         Update-ProgressUI -Current 20 -Total 100 -Activity "Fetch Users"
         Write-Debug "Executing: Get-CsOnlineUser -ResultSize 20000"
-        $users = Get-CsOnlineUser -ResultSize 20000 -ErrorAction Stop
-        
-        Write-Log "  > Found $($users.Count) users. Building Index..."
-        $global:teamsUsersMap = @{}
-        foreach ($u in $users) { if ($u.Identity) { $global:teamsUsersMap[$u.Identity] = $u } }
+        $users = Get-TeamsUsersIndexed
 
-        # 2. GET NUMBERS
+        # Step 3: Fetch Phone Numbers
         Write-Log "Step 3/5: Fetching Phone Numbers (Batched)..."
         Update-ProgressUI -Current 30 -Total 100 -Activity "Fetch Numbers"
-        $allNumbers = New-Object System.Collections.ArrayList
-        $batchSize = 1000; $skip = 0
-        while ($skip -lt 10000) {
-            Write-Debug "Executing: Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize"
-            $batch = Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize -ErrorAction Stop
-            if (!$batch) { break }
-            [void]$allNumbers.AddRange($batch)
-            $skip += $batchSize
-            Write-Log "  > Fetched batch. Total so far: $($allNumbers.Count)"
-            Update-ProgressUI -Current (30 + ($skip/200)) -Total 100 -Activity "Fetching Numbers ($($allNumbers.Count))"
-            if ($batch.Count -lt $batchSize) { break }
-        }
+        $allNumbers = Get-PhoneNumbersBatched
 
+        # Step 4: Build Data Table
         Write-Log "  > Total numbers fetched: $($allNumbers.Count). Building Data Table..."
-        $global:masterDataTable = New-Object System.Data.DataTable
-        foreach ($c in $global:tableColumns) { $col = New-Object System.Data.DataColumn $c, ([System.String]); $global:masterDataTable.Columns.Add($col) }
-
-        foreach ($num in $allNumbers) {
-            $row = $global:masterDataTable.NewRow()
-            $row["TelephoneNumber"] = $num.TelephoneNumber
-            $row["NumberType"] = $num.NumberType
-            $row["ActivationState"] = $num.ActivationState
-            $row["City"] = $num.City
-            $row["IsoCountryCode"] = $num.IsoCountryCode
-            $row["IsoSubdivision"] = $num.IsoSubdivision
-            $row["NumberSource"] = $num.NumberSource
-            $row["Tag"] = if ($num.Tag) { $num.Tag -join ", " } else { "" }
-            
-            $userId = $num.AssignedPstnTargetId
-            if ($userId -and $global:teamsUsersMap.ContainsKey($userId)) {
-                $u = $global:teamsUsersMap[$userId]
-                $row["UserPrincipalName"] = $u.UserPrincipalName
-                $row["DisplayName"] = $u.DisplayName
-                $row["OnlineVoiceRoutingPolicy"] = $u.OnlineVoiceRoutingPolicy
-                $row["EnterpriseVoiceEnabled"] = $u.EnterpriseVoiceEnabled
-                
-                # Use checking to ensure columns exist in table definition
-                if ($global:tableColumns -contains "AccountEnabled") { $row["AccountEnabled"] = $u.AccountEnabled }
-                if ($global:tableColumns -contains "PreferredDataLocation") { $row["PreferredDataLocation"] = $u.PreferredDataLocation }
-                if ($global:tableColumns -contains "UsageLocation") { $row["UsageLocation"] = $u.UsageLocation }
-                if ($global:tableColumns -contains "TeamsMeetingPolicy") { $row["TeamsMeetingPolicy"] = $u.TeamsMeetingPolicy }
-                
-                if ($global:tableColumns -contains "FeatureTypes") {
-                    if ($u.FeatureTypes -and $u.FeatureTypes -is [Array]) {
-                        $row["FeatureTypes"] = $u.FeatureTypes -join ", "
-                    } else {
-                        $row["FeatureTypes"] = $u.FeatureTypes
-                    }
-                }
-            }
-            [void]$global:masterDataTable.Rows.Add($row)
-        }
+        $global:masterDataTable = Build-TeamsDataTable -PhoneNumbers $allNumbers
         Write-Log "  > Teams Data Table built in memory."
-        
-        # 3. ORANGE DATA - CONDITIONAL EXECUTION
+
+        # Step 5: Orange Data (Conditional)
         if ($orangeEnabled) {
             Write-Log "Step 4/5: Fetching & Merging Orange Data..."
-            
-            # Check for required Auth/Customer if Key is present
+
             if ([string]::IsNullOrWhiteSpace($global:txtOrangeAuth.Text) -or [string]::IsNullOrWhiteSpace($global:txtOrangeCust.Text)) {
                 Write-Log "  > Warning: Orange API Key provided, but Auth Header or Customer Code missing. Skipping Orange Sync."
             } else {
@@ -1181,57 +1371,35 @@ $btnFetchData.Add_Click({
                 try {
                     $orangeData = Get-AllOrangeCloudNumbers
                     Write-Log "  > Orange data fetched ($($orangeData.Count) records)."
-                } catch { Write-Log "  > Orange Fetch Failed: $($_.Exception.Message). Showing Teams data only."; $orangeData = $null }
+                } catch {
+                    Write-Log "  > Orange Fetch Failed: $($_.Exception.Message). Showing Teams data only."
+                    $orangeData = $null
+                }
 
-                # Merge Logic
                 if ($orangeData) {
-                    Write-Log "  > Merging datasets..."
-                    $global:orangeHistoryMap = @{}; $orangeIndex = @{}
-                    foreach ($oNum in $orangeData) { $key = [string]$oNum.number.Replace("+","").Trim(); $orangeIndex[$key] = $oNum; $global:orangeHistoryMap["+" + $key] = $oNum.history }
-                    
-                    $dt = $global:masterDataTable; $processedKeys = @{}
-                    
-                    for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
-                        $row = $dt.Rows[$i]
-                        $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
-                        if ($orangeIndex.ContainsKey($tKey)) {
-                            $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
-                            if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $processedKeys[$tKey] = $true
-                        }
-                        if ($i % 200 -eq 0) { 
-                            Update-ProgressUI -Current (60 + (($i / $dt.Rows.Count) * 30)) -Total 100 -Activity "Merging Data ($i/$($dt.Rows.Count))"
-                        }
-                    }
-                    
-                    # Add Orange-only numbers
-                    Write-Log "  > Adding Orange-only numbers..."
-                    $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }
-                    foreach ($key in $missing) {
-                        $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
-                        if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                        $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $dt.Rows.Add($row)
-                    }
+                    Merge-OrangeDataIntoTable -DataTable $global:masterDataTable -OrangeData $orangeData
                 }
             }
         } else {
             Write-Log "Step 4/5: Skipping Orange Sync (API Key not populated)."
         }
 
-        # 4. RENDER
+        # Step 6: Render UI
         Write-Log "Step 5/5: Rendering Grid..."
         Update-ProgressUI -Current 95 -Total 100 -Activity "Rendering Grid"
         $dataGridView.DataSource = $global:masterDataTable
-        foreach ($hc in $global:defaultHiddenCols) { if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false } }
+        foreach ($hc in $global:defaultHiddenCols) {
+            if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false }
+        }
         $btnSyncOrange.Enabled = $true
-        
-        # 5. DYNAMIC FILTER UPDATE
+
+        # Step 7: Update Filters and Stats
         Write-Log "Updating Filter Tags..."
         Update-FilterTags
 
         Write-Log "--- PROCESS COMPLETE ---"
         Update-Stats
-        Update-TagStatistics 
+        Update-TagStatistics
         Update-ProgressUI -Current 100 -Total 100 -Activity "Ready"
         Reset-ProgressUI
     } catch {
@@ -1245,44 +1413,46 @@ $btnFetchData.Add_Click({
 $btnSyncOrange.Add_Click({
     # GUARD: Key Check
     if ([string]::IsNullOrWhiteSpace($global:txtOrangeKey.Text)) {
-        [System.Windows.Forms.MessageBox]::Show("Orange API Key is not populated. Feature disabled.", "Feature Disabled", "OK", "Warning"); return
+        [System.Windows.Forms.MessageBox]::Show("Orange API Key is not populated. Feature disabled.", "Feature Disabled", "OK", "Warning")
+        return
     }
 
-    if ($global:masterDataTable -eq $null) { Write-Log "No data."; return }
-    if ([string]::IsNullOrWhiteSpace($global:txtOrangeAuth.Text) -or [string]::IsNullOrWhiteSpace($global:txtOrangeCust.Text)) {
-        [System.Windows.Forms.MessageBox]::Show("You must populate all Orange Configuration fields.", "Validation Error", "OK", "Warning"); return
+    if ($global:masterDataTable -eq $null) {
+        Write-Log "No data."
+        return
     }
-    
+
+    if ([string]::IsNullOrWhiteSpace($global:txtOrangeAuth.Text) -or [string]::IsNullOrWhiteSpace($global:txtOrangeCust.Text)) {
+        [System.Windows.Forms.MessageBox]::Show("You must populate all Orange Configuration fields.", "Validation Error", "OK", "Warning")
+        return
+    }
+
     $orangeData = $null
     try {
-        $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor; Reset-ProgressUI; $dataGridView.DataSource = $null; 
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        Reset-ProgressUI
+        $dataGridView.DataSource = $null
         $orangeData = Get-AllOrangeCloudNumbers
     }
-    catch { Write-Log "Error: $($_.Exception.Message)" }
-    finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
+    catch {
+        Write-Log "Error: $($_.Exception.Message)"
+    }
+    finally {
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
 
     if ($orangeData) {
-        Write-Log "Indexing Orange..."; $global:orangeHistoryMap = @{}; $orangeIndex = @{}
-        foreach ($oNum in $orangeData) { $key = [string]$oNum.number.Replace("+","").Trim(); $orangeIndex[$key] = $oNum; $global:orangeHistoryMap["+" + $key] = $oNum.history }
-        Write-Log "Merging..."; $dt = $global:masterDataTable; $processedKeys = @{}
-        for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
-            $row = $dt.Rows[$i]; $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
-            if ($orangeIndex.ContainsKey($tKey)) {
-                $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite; if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $processedKeys[$tKey] = $true
-            }
-            if ($i % 500 -eq 0) { Update-ProgressUI -Current $i -Total $dt.Rows.Count -Activity "Merging Orange Data" }
+        Write-Log "Merging Orange data..."
+        Merge-OrangeDataIntoTable -DataTable $global:masterDataTable -OrangeData $orangeData
+
+        # Re-render grid
+        $dataGridView.DataSource = $global:masterDataTable
+        Write-Log "Sync Complete."
+
+        foreach ($hc in $global:defaultHiddenCols) {
+            if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false }
         }
-        Write-Log "Adding new..."; $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }; $idx = 0
-        foreach ($key in $missing) {
-            $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite; if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $dt.Rows.Add($row); $idx++
-            if ($idx % 100 -eq 0) { Update-ProgressUI -Current $idx -Total $missing.Count -Activity "Adding New Numbers" }
-        }
-        $dataGridView.DataSource = $global:masterDataTable; Write-Log "Sync Complete."
-        
-        foreach ($hc in $global:defaultHiddenCols) { if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false } }
-        
+
         # Update Dynamic Filters
         Update-FilterTags
 
@@ -1318,13 +1488,19 @@ $miRefreshOrange.Add_Click({
         try {
             $obj = Get-SingleOrangeNumber -PhoneNumber $ph
             if ($obj) {
-                $siteName = ""; $siteId = ""; $vs = $obj.voiceSite
-                if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                $row.Cells["OrangeSite"].Value = $siteName; $row.Cells["OrangeSiteId"].Value = $siteId; $row.Cells["OrangeStatus"].Value = $obj.status; $row.Cells["OrangeUsage"].Value = $obj.usage
+                $siteInfo = Get-OrangeSiteInfo -OrangeObject $obj
+                $row.Cells["OrangeSite"].Value = $siteInfo.SiteName
+                $row.Cells["OrangeSiteId"].Value = $siteInfo.SiteId
+                $row.Cells["OrangeStatus"].Value = $obj.status
+                $row.Cells["OrangeUsage"].Value = $obj.usage
                 $global:orangeHistoryMap[$ph] = $obj.history
                 Write-Log "Updated $ph : Status=$($obj.status)"
-            } else { Write-Log "Warning: $ph not found in Orange or error occurred." }
-        } catch { Write-Log "Error refreshing $ph : $($_.Exception.Message)" }
+            } else {
+                Write-Log "Warning: $ph not found in Orange or error occurred."
+            }
+        } catch {
+            Write-Log "Error refreshing $ph : $($_.Exception.Message)"
+        }
     }
     $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
     Reset-ProgressUI
