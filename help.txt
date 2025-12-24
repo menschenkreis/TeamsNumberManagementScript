@@ -1,0 +1,97 @@
+=============================================================================
+TEAMS PHONE MANAGER v55.2 - USER GUIDE
+=============================================================================
+
+1. OVERVIEW
+-----------------------------------------------------------------------------
+This tool manages Microsoft Teams Phone numbers and integrates with the Orange 
+Business Talk (OC) API. It allows you to assign/unassign numbers, manage voice 
+policies, track number inventory ("stock"), and synchronize status between 
+Teams and Orange Cloud.
+
+2. INITIAL CONFIGURATION (XML)
+-----------------------------------------------------------------------------
+The tool relies on a 'Settings.xml' file to persist your configuration.
+  - Load XML: Loads API keys, Proxy settings, and Tag Lists from a file.
+  - Save XML: Saves your current input fields back to the file.
+  - Required Fields for Orange Sync: 
+      * Auth Header (Bearer token logic)
+      * Customer ID
+      * API Key
+
+  * Note: The "Tag List" (Location tags) and "Low Stock Threshold" are 
+    managed directly inside the XML file.
+
+3. WORKFLOW STEPS
+-----------------------------------------------------------------------------
+Step 1: Connect
+  - Connects to the Microsoft Teams PowerShell module.
+  - If the module is missing, the tool will attempt to install it for you.
+
+Step 2: Get Data & Sync
+  - Fetches Voice Routing and Meeting Policies.
+  - Downloads all Teams Users and Phone Numbers.
+  - If API keys are present, fetches all numbers from Orange Cloud.
+  - Merges the data into the main grid.
+
+Step 3: Re-Sync Orange (Optional)
+  - Use this if you want to refresh Orange statuses without re-downloading 
+    all Teams data.
+
+4. MAIN GRID & SEARCH
+-----------------------------------------------------------------------------
+  - Filtering:
+      * Text Box: Search by Number, User, City, etc. Supports wildcards (*).
+      * Tag Filter: Filter by specific location tags.
+      * Hide Unassigned: Toggles visibility of empty/available numbers.
+  - Columns: Click the "Columns" button to show/hide specific data fields.
+  - Export: Select rows and click "Export Selection" to save as CSV.
+  - Get Free Number: Automatically finds and highlights the next available 
+    unassigned number in the current view.
+
+5. ACTIONS (BOTTOM PANEL)
+-----------------------------------------------------------------------------
+  A. Tagging (Smart Tags)
+     Select a Location Tag or check flags (Blacklist, Reserved, Premium) and 
+     click "Apply Tag".
+     * Logic: Replaces existing location tags with the new selection but 
+       preserves other flags unless explicitly unchecked.
+
+  B. Teams Assignment
+     - Assign: Assigns the selected number to a user.
+       * Supports UserPrincipalName (email) OR SamAccountName.
+       * Updates "OfficePhone" in On-Premises AD if reachable.
+     - Unassign: Removes the user from the number in Teams.
+       * Attempts to clear "telephoneNumber" in On-Premises AD.
+
+  C. Removal
+     - Remove: Permanently removes the number from your Teams Tenant.
+
+  D. Orange Cloud Actions
+     - Release from OC: Unassigns the user in Teams AND releases the 
+       number batch in Orange Cloud.
+     - Publish to OC: Publishes the selected range to Orange Cloud.
+     - Manual Publish: Allows manual entry of a number range to publish 
+       to a specific Voice Site.
+
+6. RIGHT-CLICK CONTEXT MENU
+-----------------------------------------------------------------------------
+  - Refresh Orange/Teams Info: Updates data for just the selected row(s).
+  - Change Voice Routing Policy: Grants a new voice policy to the assigned user.
+  - Grant Meeting Policy: Grants a new meeting policy to the assigned user.
+  - Enable Enterprise Voice: Toggles the EV flag for the user.
+  - Force Publish to OC: Forces a publish command for a specific site ID.
+
+7. STATISTICS & ALERTS (RIGHT PANEL)
+-----------------------------------------------------------------------------
+  - The "Tag Statistics" panel shows the total vs. free numbers per location.
+  - "Free" is defined as Unassigned and NOT marked "Reserved".
+  - Color Codes:
+      * Orange: Warning level (Stock is low).
+      * Red: Critical level (Stock is very low).
+
+8. LOGGING
+-----------------------------------------------------------------------------
+  - A comprehensive log is displayed in the "Execution Log" panel.
+  - Log files are also saved automatically to the "ExecutionLogs" folder 
+    in the script directory.
