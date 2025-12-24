@@ -32,7 +32,7 @@ To use this tool effectively, ensure the following requirements are met:
 1.  **Download:** Download the `.ps1` script file from this repository.
 2.  **Run:** Execute the script using PowerShell 7.
     ```powershell
-    .\TeamsManagementScript.ps1
+    .\TeamsNumberManagementScript.ps1
     ```
 
 ### Configuration (Settings.xml)
