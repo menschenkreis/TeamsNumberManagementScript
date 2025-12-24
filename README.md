@@ -30,9 +30,9 @@ To use this tool effectively, ensure the following requirements are met:
 ## Installation & Usage
 
 1.  **Download:** Download the `.ps1` script file from this repository.
-2.  **Run:** Execute the script using PowerShell.
+2.  **Run:** Execute the script using PowerShell 7.
     ```powershell
-    .\TeamsPhoneManager_v56.4.ps1
+    .\TeamsManagementScript.ps1
     ```
 
 ### Configuration (Settings.xml)
@@ -44,7 +44,7 @@ While the script can run standalone, it is **highly recommended** to create a `S
   <OrangeCustomerID>YOUR_CUSTOMER_ID</OrangeCustomerID>
   <OrangeAuthHeader>Basic YOUR_BASE64_AUTH_HEADER</OrangeAuthHeader>
   <OrangeApiKey>YOUR_API_KEY</OrangeApiKey>
-  <Proxy>[http://proxy.address:8080](http://proxy.address:8080)</Proxy>
+  <Proxy>http://proxy.address:8080</Proxy>
 
   <LowStockAlertThreshold>5</LowStockAlertThreshold>
   <SelectTagList>London, Paris, New York, HQ, Remote</SelectTagList>
