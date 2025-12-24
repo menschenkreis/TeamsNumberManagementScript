@@ -1,5 +1,5 @@
 # =============================================================================
-# TEAMS PHONE MANAGER v56.2 (Renamed Buttons)
+# TEAMS PHONE MANAGER v56.4 (UI Spacing & Centering)
 # =============================================================================
 
 #region 1. Cleanup & Assemblies
@@ -167,14 +167,14 @@ function Update-ProgressUI {
     if ($progressBar -and $Total -gt 0) {
         $pct = [Math]::Min(100, [int](($Current / $Total) * 100))
         $progressBar.Value = $pct
-        $global:form.Text = "Teams Phone Manager v56.2 - $Activity ($Current / $Total)"
+        $global:form.Text = "Teams Phone Manager v56.4 - $Activity ($Current / $Total)"
     }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
 function Reset-ProgressUI {
     if ($progressBar) { $progressBar.Value = 0 }
-    if ($global:form) { $global:form.Text = "Teams Phone Manager v56.2" }
+    if ($global:form) { $global:form.Text = "Teams Phone Manager v56.4" }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
@@ -702,7 +702,7 @@ function Unpublish-OrangeNumbersBatch {
 
 #region 8. GUI Construction
 $global:form = New-Object System.Windows.Forms.Form
-$global:form.Text = "Teams Phone Manager v56.2"
+$global:form.Text = "Teams Phone Manager v56.4"
 $global:form.Size = New-Object System.Drawing.Size(1600, 920) 
 $global:form.WindowState = "Maximized" # START MAXIMIZED
 $global:form.StartPosition = "CenterScreen"
@@ -717,25 +717,48 @@ $grpConfig.Text = "Orange API Configuration"
 $grpConfig.Anchor = "Top, Left, Right"
 
 # Layout
-$lblAuth = New-Object System.Windows.Forms.Label; $lblAuth.Location = New-Object System.Drawing.Point(10, 25); $lblAuth.Size = New-Object System.Drawing.Size(80, 20); $lblAuth.Text = "Auth Header:"
-$global:txtOrangeAuth = New-Object System.Windows.Forms.TextBox; $global:txtOrangeAuth.Location = New-Object System.Drawing.Point(90, 22); $global:txtOrangeAuth.Size = New-Object System.Drawing.Size(200, 20); $global:txtOrangeAuth.PasswordChar = "*"
+# Vertical Centering (Y=31 for Labels, Y=28 for Controls)
+# Horizontal Spacing (10px gap between Label end and Input start)
 
-$lblCust = New-Object System.Windows.Forms.Label; $lblCust.Location = New-Object System.Drawing.Point(300, 25); $lblCust.Size = New-Object System.Drawing.Size(90, 20); $lblCust.Text = "Customer Id:"
-$global:txtOrangeCust = New-Object System.Windows.Forms.TextBox; $global:txtOrangeCust.Location = New-Object System.Drawing.Point(390, 22); $global:txtOrangeCust.Size = New-Object System.Drawing.Size(60, 20); $global:txtOrangeCust.Text = ""
+$lblAuth = New-Object System.Windows.Forms.Label
+$lblAuth.Location = New-Object System.Drawing.Point(10, 31)
+$lblAuth.Size = New-Object System.Drawing.Size(80, 20); $lblAuth.Text = "Auth Header:"
 
-$lblKey = New-Object System.Windows.Forms.Label; $lblKey.Location = New-Object System.Drawing.Point(460, 25); $lblKey.Size = New-Object System.Drawing.Size(50, 20); $lblKey.Text = "API Key:"
-$global:txtOrangeKey = New-Object System.Windows.Forms.TextBox; $global:txtOrangeKey.Location = New-Object System.Drawing.Point(510, 22); $global:txtOrangeKey.Size = New-Object System.Drawing.Size(120, 20); $global:txtOrangeKey.PasswordChar = "*"
+$global:txtOrangeAuth = New-Object System.Windows.Forms.TextBox
+$global:txtOrangeAuth.Location = New-Object System.Drawing.Point(100, 28)
+$global:txtOrangeAuth.Size = New-Object System.Drawing.Size(200, 20); $global:txtOrangeAuth.PasswordChar = "*"
 
-$lblProxy = New-Object System.Windows.Forms.Label; $lblProxy.Location = New-Object System.Drawing.Point(640, 25); $lblProxy.Size = New-Object System.Drawing.Size(50, 20); $lblProxy.Text = "Proxy:"
-$global:txtProxy = New-Object System.Windows.Forms.TextBox; $global:txtProxy.Location = New-Object System.Drawing.Point(690, 22); $global:txtProxy.Size = New-Object System.Drawing.Size(150, 20); $global:txtProxy.Text = ""
+$lblCust = New-Object System.Windows.Forms.Label
+$lblCust.Location = New-Object System.Drawing.Point(320, 31)
+$lblCust.Size = New-Object System.Drawing.Size(80, 20); $lblCust.Text = "Customer Id:"
 
-# Buttons
-$btnLoadXml = New-Object System.Windows.Forms.Button; $btnLoadXml.Location = New-Object System.Drawing.Point(850, 19); $btnLoadXml.Size = New-Object System.Drawing.Size(80, 25); $btnLoadXml.Text = "Load XML"
-$btnSaveXml = New-Object System.Windows.Forms.Button; $btnSaveXml.Location = New-Object System.Drawing.Point(935, 19); $btnSaveXml.Size = New-Object System.Drawing.Size(80, 25); $btnSaveXml.Text = "Save XML"
+$global:txtOrangeCust = New-Object System.Windows.Forms.TextBox
+$global:txtOrangeCust.Location = New-Object System.Drawing.Point(410, 28)
+$global:txtOrangeCust.Size = New-Object System.Drawing.Size(60, 20); $global:txtOrangeCust.Text = ""
+
+$lblKey = New-Object System.Windows.Forms.Label
+$lblKey.Location = New-Object System.Drawing.Point(490, 31)
+$lblKey.Size = New-Object System.Drawing.Size(60, 20); $lblKey.Text = "API Key:"
+
+$global:txtOrangeKey = New-Object System.Windows.Forms.TextBox
+$global:txtOrangeKey.Location = New-Object System.Drawing.Point(560, 28)
+$global:txtOrangeKey.Size = New-Object System.Drawing.Size(120, 20); $global:txtOrangeKey.PasswordChar = "*"
+
+$lblProxy = New-Object System.Windows.Forms.Label
+$lblProxy.Location = New-Object System.Drawing.Point(700, 31)
+$lblProxy.Size = New-Object System.Drawing.Size(50, 20); $lblProxy.Text = "Proxy:"
+
+$global:txtProxy = New-Object System.Windows.Forms.TextBox
+$global:txtProxy.Location = New-Object System.Drawing.Point(760, 28)
+$global:txtProxy.Size = New-Object System.Drawing.Size(150, 20); $global:txtProxy.Text = ""
+
+# Buttons (Y=28)
+$btnLoadXml = New-Object System.Windows.Forms.Button; $btnLoadXml.Location = New-Object System.Drawing.Point(940, 28); $btnLoadXml.Size = New-Object System.Drawing.Size(80, 25); $btnLoadXml.Text = "Load XML"
+$btnSaveXml = New-Object System.Windows.Forms.Button; $btnSaveXml.Location = New-Object System.Drawing.Point(1030, 28); $btnSaveXml.Size = New-Object System.Drawing.Size(80, 25); $btnSaveXml.Text = "Save XML"
 
 # UPDATED: Moved Help Button to the far right (1120) to utilize new width
 $btnOrangeHelp = New-Object System.Windows.Forms.Button
-$btnOrangeHelp.Location = New-Object System.Drawing.Point(1120, 19)
+$btnOrangeHelp.Location = New-Object System.Drawing.Point(1120, 28)
 $btnOrangeHelp.Size = New-Object System.Drawing.Size(100, 25)
 $btnOrangeHelp.Text = "Get API Help"
 $btnOrangeHelp.BackColor = "#17a2b8"
@@ -870,33 +893,45 @@ $btnGetFree = New-Object System.Windows.Forms.Button; $btnGetFree.Location = New
 $sepFilter = New-Object System.Windows.Forms.Label; $sepFilter.Location = New-Object System.Drawing.Point(525, $innerY); $sepFilter.Size = New-Object System.Drawing.Size(2, 30); $sepFilter.BorderStyle = "Fixed3D"
 
 # 3. Filter Area
-$lblFilter = New-Object System.Windows.Forms.Label; $lblFilterY = $innerY + 5; $lblFilter.Location = New-Object System.Drawing.Point(535, $lblFilterY); $lblFilter.Size = New-Object System.Drawing.Size(35, 20); $lblFilter.Text = "Text:"
-$txtFilter = New-Object System.Windows.Forms.TextBox; $txtFilterY = $innerY + 2; $txtFilter.Location = New-Object System.Drawing.Point(570, $txtFilterY); $txtFilter.Size = New-Object System.Drawing.Size(100, 20)
+# UPDATED: Label changed from 'Text:' to 'Filter:'
+$lblFilter = New-Object System.Windows.Forms.Label; $lblFilterY = $innerY + 5; 
+$lblFilter.Location = New-Object System.Drawing.Point(535, $lblFilterY); $lblFilter.Size = New-Object System.Drawing.Size(35, 20); $lblFilter.Text = "Filter:"
 
-# Tag Filter Dropdown
-$lblFilterTag = New-Object System.Windows.Forms.Label; $lblFilterTag.Location = New-Object System.Drawing.Point(675, $lblFilterY); $lblFilterTag.Size = New-Object System.Drawing.Size(30, 20); $lblFilterTag.Text = "Tag:"
-$global:cmbFilterTag = New-Object System.Windows.Forms.ComboBox; $global:cmbFilterTag.Location = New-Object System.Drawing.Point(705, $txtFilterY); $global:cmbFilterTag.Size = New-Object System.Drawing.Size(90, 20); $global:cmbFilterTag.DropDownStyle = "DropDownList"
+# UPDATED: Textbox width increased by 30px (100 -> 130)
+$txtFilter = New-Object System.Windows.Forms.TextBox; $txtFilterY = $innerY + 2; 
+$txtFilter.Location = New-Object System.Drawing.Point(570, $txtFilterY); $txtFilter.Size = New-Object System.Drawing.Size(130, 20)
+
+# Tag Filter Dropdown - UPDATED: Shifted X right by 30px (675 -> 705)
+$lblFilterTag = New-Object System.Windows.Forms.Label; 
+$lblFilterTag.Location = New-Object System.Drawing.Point(705, $lblFilterY); $lblFilterTag.Size = New-Object System.Drawing.Size(30, 20); $lblFilterTag.Text = "Tag:"
+
+# UPDATED: Shifted X right by 30px (705 -> 735)
+$global:cmbFilterTag = New-Object System.Windows.Forms.ComboBox; 
+$global:cmbFilterTag.Location = New-Object System.Drawing.Point(735, $txtFilterY); $global:cmbFilterTag.Size = New-Object System.Drawing.Size(90, 20); $global:cmbFilterTag.DropDownStyle = "DropDownList"
 $global:cmbFilterTag.Items.Add("All")
 $global:cmbFilterTag.SelectedIndex = 0
-$btnApplyFilter = New-Object System.Windows.Forms.Button; $btnApplyFilter.Location = New-Object System.Drawing.Point(800, $innerY); $btnApplyFilter.Size = New-Object System.Drawing.Size(80, 30); $btnApplyFilter.Text = "Apply Filter"; $btnApplyFilter.BackColor = "#A9A9A9"; $btnApplyFilter.ForeColor = "White"
 
-# 4. Toggles & Columns (Shifted Right to use the 1240 width)
+# UPDATED: Shifted X right by 30px (800 -> 830)
+$btnApplyFilter = New-Object System.Windows.Forms.Button; 
+$btnApplyFilter.Location = New-Object System.Drawing.Point(830, $innerY); $btnApplyFilter.Size = New-Object System.Drawing.Size(80, 30); $btnApplyFilter.Text = "Apply Filter"; $btnApplyFilter.BackColor = "#A9A9A9"; $btnApplyFilter.ForeColor = "White"
+
+# 4. Toggles & Columns (Shifted Right)
 $btnToggleUnassigned = New-Object System.Windows.Forms.Button
-# UPDATED X: 900
-$btnToggleUnassigned.Location = New-Object System.Drawing.Point(900, $innerY) 
+# UPDATED: Shifted X right by 30px (900 -> 930)
+$btnToggleUnassigned.Location = New-Object System.Drawing.Point(930, $innerY) 
 $btnToggleUnassigned.Size = New-Object System.Drawing.Size(120, 30)
 $btnToggleUnassigned.Text = "Hide Unassigned"
 $btnToggleUnassigned.BackColor = "#e0e0e0"
 
 $btnSelectCols = New-Object System.Windows.Forms.Button
-# UPDATED X: 1040
-$btnSelectCols.Location = New-Object System.Drawing.Point(1040, $innerY)
+# UPDATED: Shifted X right by 30px (1040 -> 1070)
+$btnSelectCols.Location = New-Object System.Drawing.Point(1070, $innerY)
 $btnSelectCols.Size = New-Object System.Drawing.Size(70, 30); $btnSelectCols.Text = "Columns"; $btnSelectCols.BackColor = "#808080"; $btnSelectCols.ForeColor = "White"
 
 # Help Button
 $btnHelp = New-Object System.Windows.Forms.Button
-# UPDATED X: 1130
-$btnHelp.Location = New-Object System.Drawing.Point(1130, $innerY)
+# UPDATED: Shifted X right by 30px (1130 -> 1160)
+$btnHelp.Location = New-Object System.Drawing.Point(1160, $innerY)
 $btnHelp.Size = New-Object System.Drawing.Size(60, 30)
 $btnHelp.Text = "Help"
 $btnHelp.BackColor = "#17a2b8"
@@ -1028,6 +1063,9 @@ $btnSelectCols.Add_Click({
 # UPDATED CONNECT BUTTON LOGIC (User Request: No Minimize)
 $btnConnect.Add_Click({
     try {
+        # UPDATED: Immediate feedback
+        Write-Log "Authenticating..."
+        
         # REMOVED: $global:form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
         [System.Windows.Forms.Application]::DoEvents()
 
