@@ -24,7 +24,8 @@ $global:masterDataTable = $null
 $global:form = $null 
 $global:voiceRoutingPolicies = @()
 $global:teamsMeetingPolicies = @()
-$global:hideUnassigned = $false 
+$global:hideUnassigned = $false
+$global:appVersion = "v56.4"
 
 # --- SETTINGS GLOBALS ---
 $global:settingsXmlPath = $null
@@ -161,14 +162,14 @@ function Update-ProgressUI {
     if ($progressBar -and $Total -gt 0) {
         $pct = [Math]::Min(100, [int](($Current / $Total) * 100))
         $progressBar.Value = $pct
-        $global:form.Text = "Teams Phone Manager v56.4 - $Activity ($Current / $Total)"
+        $global:form.Text = "Teams Phone Manager $($global:appVersion) - $Activity ($Current / $Total)"
     }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
 function Reset-ProgressUI {
     if ($progressBar) { $progressBar.Value = 0 }
-    if ($global:form) { $global:form.Text = "Teams Phone Manager v56.4" }
+    if ($global:form) { $global:form.Text = "Teams Phone Manager $($global:appVersion)" }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
@@ -688,6 +689,50 @@ function Unpublish-OrangeNumbersBatch {
     }
     return $successfulRows
 }
+
+function Merge-OrangeData {
+    param([System.Collections.Generic.List[Object]]$OrangeData)
+
+    Write-Log "Indexing Orange..."
+    $global:orangeHistoryMap = @{}
+    $orangeIndex = @{}
+    foreach ($oNum in $OrangeData) {
+        $key = [string]$oNum.number.Replace("+","").Trim()
+        $orangeIndex[$key] = $oNum
+        $global:orangeHistoryMap["+" + $key] = $oNum.history
+    }
+
+    Write-Log "Merging..."
+    $dt = $global:masterDataTable
+    $processedKeys = @{}
+
+    for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
+        $row = $dt.Rows[$i]
+        $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
+        if ($orangeIndex.ContainsKey($tKey)) {
+            $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
+            if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
+            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage
+            $processedKeys[$tKey] = $true
+        }
+        if ($i % 200 -eq 0) {
+            Update-ProgressUI -Current $i -Total $dt.Rows.Count -Activity "Merging Orange Data ($i/$($dt.Rows.Count))"
+        }
+    }
+
+    Write-Log "Adding Orange-only numbers..."
+    $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }
+    $idx = 0
+    foreach ($key in $missing) {
+        $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
+        if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
+        $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage
+        $dt.Rows.Add($row)
+        $idx++
+        if ($idx % 100 -eq 0) { Update-ProgressUI -Current $idx -Total $missing.Count -Activity "Adding New Numbers" }
+    }
+    Write-Log "Merge complete."
+}
 #endregion
 
 # =============================================================================
@@ -696,7 +741,7 @@ function Unpublish-OrangeNumbersBatch {
 
 #region 8. GUI Construction
 $global:form = New-Object System.Windows.Forms.Form
-$global:form.Text = "Teams Phone Manager v56.4"
+$global:form.Text = "Teams Phone Manager $($global:appVersion)"
 $global:form.Size = New-Object System.Drawing.Size(1600, 920) 
 $global:form.WindowState = "Maximized" # START MAXIMIZED
 $global:form.StartPosition = "CenterScreen"
@@ -1211,36 +1256,7 @@ $btnFetchData.Add_Click({
                     Write-Log "  > Orange data fetched ($($orangeData.Count) records)."
                 } catch { Write-Log "  > Orange Fetch Failed: $($_.Exception.Message). Showing Teams data only."; $orangeData = $null }
 
-                # Merge Logic
-                if ($orangeData) {
-                    Write-Log "  > Merging datasets..."
-                    $global:orangeHistoryMap = @{}; $orangeIndex = @{}
-                    foreach ($oNum in $orangeData) { $key = [string]$oNum.number.Replace("+","").Trim(); $orangeIndex[$key] = $oNum; $global:orangeHistoryMap["+" + $key] = $oNum.history }
-                    
-                    $dt = $global:masterDataTable; $processedKeys = @{}
-                    
-                    for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
-                        $row = $dt.Rows[$i]
-                        $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
-                        if ($orangeIndex.ContainsKey($tKey)) {
-                            $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
-                            if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $processedKeys[$tKey] = $true
-                        }
-                        if ($i % 200 -eq 0) { 
-                            Update-ProgressUI -Current (60 + (($i / $dt.Rows.Count) * 30)) -Total 100 -Activity "Merging Data ($i/$($dt.Rows.Count))"
-                        }
-                    }
-                    
-                    # Add Orange-only numbers
-                    Write-Log "  > Adding Orange-only numbers..."
-                    $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }
-                    foreach ($key in $missing) {
-                        $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
-                        if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                        $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $dt.Rows.Add($row)
-                    }
-                }
+                if ($orangeData) { Merge-OrangeData -OrangeData $orangeData }
             }
         } else {
             Write-Log "Step 4/5: Skipping Orange Sync (API Key not populated)."
@@ -1290,34 +1306,17 @@ $btnSyncOrange.Add_Click({
     finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
 
     if ($orangeData) {
-        Write-Log "Indexing Orange..."; $global:orangeHistoryMap = @{}; $orangeIndex = @{}
-        foreach ($oNum in $orangeData) { $key = [string]$oNum.number.Replace("+","").Trim(); $orangeIndex[$key] = $oNum; $global:orangeHistoryMap["+" + $key] = $oNum.history }
-        Write-Log "Merging..."; $dt = $global:masterDataTable; $processedKeys = @{}
-        for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
-            $row = $dt.Rows[$i]; $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
-            if ($orangeIndex.ContainsKey($tKey)) {
-                $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite; if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $processedKeys[$tKey] = $true
-            }
-            if ($i % 500 -eq 0) { Update-ProgressUI -Current $i -Total $dt.Rows.Count -Activity "Merging Orange Data" }
-        }
-        Write-Log "Adding new..."; $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }; $idx = 0
-        foreach ($key in $missing) {
-            $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite; if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $dt.Rows.Add($row); $idx++
-            if ($idx % 100 -eq 0) { Update-ProgressUI -Current $idx -Total $missing.Count -Activity "Adding New Numbers" }
-        }
-        $dataGridView.DataSource = $global:masterDataTable; Write-Log "Sync Complete."
-        
-        foreach ($hc in $global:defaultHiddenCols) { if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false } }
-        
-        # Update Dynamic Filters
-        Update-FilterTags
+        Merge-OrangeData -OrangeData $orangeData
 
+        $dataGridView.DataSource = $global:masterDataTable
+        foreach ($hc in $global:defaultHiddenCols) { if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false } }
+
+        Update-FilterTags
         Update-Stats
         Update-TagStatistics
         Update-ProgressUI -Current 100 -Total 100 -Activity "Done"
         Reset-ProgressUI
+        Write-Log "Sync Complete."
     }
 })
 #endregion
@@ -1608,7 +1607,7 @@ $btnAssign.Add_Click({
         $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor; Write-Log "Assigning $ph to $upn ($type)..."; 
         Set-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $ph -PhoneNumberType $type -ErrorAction Stop; Write-Log "Teams Assignment Successful."
         $row.Cells["UserPrincipalName"].Value = $userObj.UserPrincipalName; $row.Cells["DisplayName"].Value = $userObj.DisplayName; $row.Cells["ActivationState"].Value = "Assigned"
-        Write-Log "Syncing to On-Prem AD..."; try { $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$upn'" -ErrorAction Stop; if ($adUser) { Set-ADUser -Identity $adUser -OfficePhone $ph -ErrorAction Stop; Write-Log "AD OfficePhone updated for $upn." } } catch { Write-Log "AD Sync Warning: $($_.Exception.Message)" }
+        Write-Log "Syncing to On-Prem AD..."; try { $safeUpn = $upn.Replace("'", "''"); $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeUpn'" -ErrorAction Stop; if ($adUser) { Set-ADUser -Identity $adUser -OfficePhone $ph -ErrorAction Stop; Write-Log "AD OfficePhone updated for $upn." } } catch { Write-Log "AD Sync Warning: $($_.Exception.Message)" }
         Update-TagStatistics # Update stats
     } catch { Write-Log "Assignment Failed: $($_.Exception.Message)"; [System.Windows.Forms.MessageBox]::Show("Assignment Failed: $($_.Exception.Message)", "Error") } finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
 })
@@ -1648,7 +1647,8 @@ $btnReleaseOC.Add_Click({
                 # NEW: Try to sync to AD (Clear OfficePhone)
                 Write-Log "Syncing to On-Prem AD (Clearing OfficePhone)..."
                 try {
-                    $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$upn'" -ErrorAction Stop
+                    $safeUpn = $upn.Replace("'", "''")
+                    $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeUpn'" -ErrorAction Stop
                     if ($adUser) {
                         Set-ADUser -Identity $adUser -Clear "telephoneNumber" -ErrorAction Stop
                         Write-Log "AD OfficePhone cleared for $upn."
@@ -1872,7 +1872,8 @@ $btnUnassign.Add_Click({
                     # NEW: Try to sync to AD (Clear OfficePhone)
                     Write-Log "Syncing to On-Prem AD (Clearing OfficePhone)..."
                     try {
-                        $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$u'" -ErrorAction Stop
+                        $safeU = $u.Replace("'", "''")
+                        $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeU'" -ErrorAction Stop
                         if ($adUser) {
                             Set-ADUser -Identity $adUser -Clear "telephoneNumber" -ErrorAction Stop
                             Write-Log "AD OfficePhone cleared for $u."
@@ -1880,16 +1881,17 @@ $btnUnassign.Add_Click({
                     } catch {
                         Write-Log "AD Sync Warning: $($_.Exception.Message)"
                     }
-                    
-                } catch { 
-                    $errMsg = $_.Exception.Message; 
-                    if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") { 
+
+                } catch {
+                    $errMsg = $_.Exception.Message;
+                    if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") {
                         Write-Log "Detected On-Prem user. Clearing AD attributes..."
-                        try { 
-                            Get-ADUser -Filter "UserPrincipalName -eq '$u'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop; 
-                            Write-Log "Success: AD attributes cleared." 
-                        } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." } 
-                    } else { Write-Log "Error unassigning ${p}: $errMsg" } 
+                        try {
+                            $safeU = $u.Replace("'", "''")
+                            Get-ADUser -Filter "UserPrincipalName -eq '$safeU'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop;
+                            Write-Log "Success: AD attributes cleared."
+                        } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." }
+                    } else { Write-Log "Error unassigning ${p}: $errMsg" }
                 } 
             } else { Write-Log "Skipped $p (Not assigned)." } 
         }; 
@@ -1935,12 +1937,13 @@ $btnRemove.Add_Click({
                         $errMsg = $_.Exception.Message; 
                         if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") { 
                             Write-Log "Detected On-Prem user. Clearing AD attributes..."
-                            try { 
-                                Get-ADUser -Filter "UserPrincipalName -eq '$u'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop; 
-                                Write-Log "Success: AD attributes cleared." 
-                            } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." } 
-                        } else { throw $_ } 
-                    } 
+                            try {
+                                $safeU = $u.Replace("'", "''")
+                                Get-ADUser -Filter "UserPrincipalName -eq '$safeU'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop;
+                                Write-Log "Success: AD attributes cleared."
+                            } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." }
+                        } else { throw $_ }
+                    }
                 }; 
                 Remove-CsOnlineTelephoneNumber -TelephoneNumber ([string[]]@($p)) -ErrorAction Stop; 
                 [void]$toRemove.Add($r);
