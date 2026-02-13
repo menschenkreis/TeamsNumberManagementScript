@@ -10,10 +10,10 @@ if ($global:form -and !$global:form.IsDisposed) {
 }
 
 # Load Assemblies
-try { Add-Type -AssemblyName System.Windows.Forms } catch {}
-try { Add-Type -AssemblyName System.Drawing } catch {}
-try { Add-Type -AssemblyName System.Data } catch {}
-try { Add-Type -AssemblyName Microsoft.VisualBasic } catch {}
+try { Add-Type -AssemblyName System.Windows.Forms } catch { Write-Host "Warning: Failed to load System.Windows.Forms - $($_.Exception.Message)" }
+try { Add-Type -AssemblyName System.Drawing } catch { Write-Host "Warning: Failed to load System.Drawing - $($_.Exception.Message)" }
+try { Add-Type -AssemblyName System.Data } catch { Write-Host "Warning: Failed to load System.Data - $($_.Exception.Message)" }
+try { Add-Type -AssemblyName Microsoft.VisualBasic } catch { Write-Host "Warning: Failed to load Microsoft.VisualBasic - $($_.Exception.Message)" }
 #endregion
 
 #region 2. Global Variables & Logging
@@ -1190,13 +1190,14 @@ $btnFetchData.Add_Click({
         Update-ProgressUI -Current 30 -Total 100 -Activity "Fetch Numbers"
         $allNumbers = New-Object System.Collections.ArrayList
         $batchSize = 1000; $skip = 0
-        while ($skip -lt 10000) {
+        while ($true) {
             $batch = Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize -ErrorAction Stop
             if (!$batch) { break }
             [void]$allNumbers.AddRange($batch)
             $skip += $batchSize
             Write-Log "  > Fetched batch. Total so far: $($allNumbers.Count)"
-            Update-ProgressUI -Current (30 + ($skip/200)) -Total 100 -Activity "Fetching Numbers ($($allNumbers.Count))"
+            $pct = [Math]::Min(55, 30 + [int]($allNumbers.Count / 100))
+            Update-ProgressUI -Current $pct -Total 100 -Activity "Fetching Numbers ($($allNumbers.Count))"
             if ($batch.Count -lt $batchSize) { break }
         }
 
