@@ -5,15 +5,20 @@
 #region 1. Cleanup & Assemblies
 # --- CLEANUP SECTION ---
 if ($global:form -and !$global:form.IsDisposed) {
-    $global:form.Close()
-    $global:form.Dispose()
+    try {
+        $global:form.Close()
+        $global:form.Dispose()
+    } catch {
+        Write-Host "Warning: Could not cleanly dispose previous form - $($_.Exception.Message)"
+    }
 }
+$global:form = $null
 
 # Load Assemblies
-try { Add-Type -AssemblyName System.Windows.Forms } catch {}
-try { Add-Type -AssemblyName System.Drawing } catch {}
-try { Add-Type -AssemblyName System.Data } catch {}
-try { Add-Type -AssemblyName Microsoft.VisualBasic } catch {}
+try { Add-Type -AssemblyName System.Windows.Forms } catch { Write-Host "Warning: Failed to load System.Windows.Forms - $($_.Exception.Message)" }
+try { Add-Type -AssemblyName System.Drawing } catch { Write-Host "Warning: Failed to load System.Drawing - $($_.Exception.Message)" }
+try { Add-Type -AssemblyName System.Data } catch { Write-Host "Warning: Failed to load System.Data - $($_.Exception.Message)" }
+try { Add-Type -AssemblyName Microsoft.VisualBasic } catch { Write-Host "Warning: Failed to load Microsoft.VisualBasic - $($_.Exception.Message)" }
 #endregion
 
 #region 2. Global Variables & Logging
@@ -24,7 +29,8 @@ $global:masterDataTable = $null
 $global:form = $null 
 $global:voiceRoutingPolicies = @()
 $global:teamsMeetingPolicies = @()
-$global:hideUnassigned = $false 
+$global:hideUnassigned = $false
+$global:appVersion = "v56.4"
 
 # --- SETTINGS GLOBALS ---
 $global:settingsXmlPath = $null
@@ -143,12 +149,6 @@ function Write-Log($message) {
     }
 }
 
-function Write-Debug($message) {
-    if ($global:cbDebug.Checked) {
-        Write-Log "[DEBUG] $message"
-    }
-}
-
 # --- HELPER: CHECK BLACKLIST ---
 function Test-IsBlacklisted {
     param([System.Windows.Forms.DataGridViewRow]$Row)
@@ -167,14 +167,14 @@ function Update-ProgressUI {
     if ($progressBar -and $Total -gt 0) {
         $pct = [Math]::Min(100, [int](($Current / $Total) * 100))
         $progressBar.Value = $pct
-        $global:form.Text = "Teams Phone Manager v56.4 - $Activity ($Current / $Total)"
+        $global:form.Text = "Teams Phone Manager $($global:appVersion) - $Activity ($Current / $Total)"
     }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
 function Reset-ProgressUI {
     if ($progressBar) { $progressBar.Value = 0 }
-    if ($global:form) { $global:form.Text = "Teams Phone Manager v56.4" }
+    if ($global:form) { $global:form.Text = "Teams Phone Manager $($global:appVersion)" }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
@@ -190,13 +190,36 @@ function Update-Stats {
 
 function Get-SimpleInput {
     param([string]$Title = "Input", [string]$Prompt = "Please enter value:")
-    $f = New-Object System.Windows.Forms.Form; $f.Width = 400; $f.Height = 180; $f.Text = $Title; $f.StartPosition = "CenterParent"; $f.FormBorderStyle = "FixedDialog"; $f.MaximizeBox = $false; $f.MinimizeBox = $false
-    $lbl = New-Object System.Windows.Forms.Label; $lbl.Location = New-Object System.Drawing.Point(20, 20); $lbl.Size = New-Object System.Drawing.Size(340, 20); $lbl.Text = $Prompt; $f.Controls.Add($lbl)
-    $txt = New-Object System.Windows.Forms.TextBox; $txt.Location = New-Object System.Drawing.Point(20, 50); $txt.Size = New-Object System.Drawing.Size(340, 20); $f.Controls.Add($txt)
-    $btnOk = New-Object System.Windows.Forms.Button; $btnOk.Text = "OK"; $btnOk.DialogResult = "OK"; $btnOk.Location = New-Object System.Drawing.Point(200, 90); $f.Controls.Add($btnOk)
-    $btnCancel = New-Object System.Windows.Forms.Button; $btnCancel.Text = "Cancel"; $btnCancel.DialogResult = "Cancel"; $btnCancel.Location = New-Object System.Drawing.Point(280, 90); $f.Controls.Add($btnCancel)
+
+    $f = New-Object System.Windows.Forms.Form
+    $f.Width = 400; $f.Height = 180; $f.Text = $Title
+    $f.StartPosition = "CenterParent"; $f.FormBorderStyle = "FixedDialog"
+    $f.MaximizeBox = $false; $f.MinimizeBox = $false
+
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Location = New-Object System.Drawing.Point(20, 20)
+    $lbl.Size = New-Object System.Drawing.Size(340, 20)
+    $lbl.Text = $Prompt
+    $f.Controls.Add($lbl)
+
+    $txt = New-Object System.Windows.Forms.TextBox
+    $txt.Location = New-Object System.Drawing.Point(20, 50)
+    $txt.Size = New-Object System.Drawing.Size(340, 20)
+    $f.Controls.Add($txt)
+
+    $btnOk = New-Object System.Windows.Forms.Button
+    $btnOk.Text = "OK"; $btnOk.DialogResult = "OK"
+    $btnOk.Location = New-Object System.Drawing.Point(200, 90)
+    $f.Controls.Add($btnOk)
+
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = "Cancel"; $btnCancel.DialogResult = "Cancel"
+    $btnCancel.Location = New-Object System.Drawing.Point(280, 90)
+    $f.Controls.Add($btnCancel)
+
     $f.AcceptButton = $btnOk; $f.CancelButton = $btnCancel
-    if ($f.ShowDialog() -eq "OK") { return $txt.Text } return $null
+    if ($f.ShowDialog() -eq "OK") { return $txt.Text }
+    return $null
 }
 
 function Get-SelectionInput {
@@ -299,16 +322,35 @@ function Get-ManualPublishInput {
 function Export-SelectedToCSV {
     $sel = $dataGridView.SelectedRows
     if ($sel.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Please select rows to export.", "Info"); return }
-    $sfd = New-Object System.Windows.Forms.SaveFileDialog; $sfd.Filter = "CSV Files (*.csv)|*.csv"; $sfd.Title = "Save Export As"; $sfd.FileName = "TeamsPhoneExport_$(Get-Date -Format 'yyyyMMdd_HHmm').csv"
+    $sfd = New-Object System.Windows.Forms.SaveFileDialog
+    $sfd.Filter = "CSV Files (*.csv)|*.csv"
+    $sfd.Title = "Save Export As"
+    $sfd.FileName = "TeamsPhoneExport_$(Get-Date -Format 'yyyyMMdd_HHmm').csv"
+
     if ($sfd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $path = $sfd.FileName; Write-Log "Exporting $($sel.Count) rows to CSV..."; $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $path = $sfd.FileName
+        Write-Log "Exporting $($sel.Count) rows to CSV..."
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         try {
-            $exportList = New-Object System.Collections.ArrayList
+            $exportList = [System.Collections.Generic.List[PSCustomObject]]::new()
             foreach ($row in $sel) {
-                $obj = [Ordered]@{}; foreach ($colName in $global:tableColumns) { $val = $row.Cells[$colName].Value; if ($null -eq $val) { $val = "" }; $obj[$colName] = [string]$val }; [void]$exportList.Add([PSCustomObject]$obj)
+                $obj = [Ordered]@{}
+                foreach ($colName in $global:tableColumns) {
+                    $val = $row.Cells[$colName].Value
+                    if ($null -eq $val) { $val = "" }
+                    $obj[$colName] = [string]$val
+                }
+                $exportList.Add([PSCustomObject]$obj)
             }
-            $exportList | Export-Csv -Path $path -NoTypeInformation -Delimiter "," -Encoding UTF8; Write-Log "Export saved to: $path"; [System.Windows.Forms.MessageBox]::Show("Export successful!", "Done")
-        } catch { Write-Log "Export Error: $($_.Exception.Message)"; [System.Windows.Forms.MessageBox]::Show("Export Failed: $($_.Exception.Message)", "Error") } finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
+            $exportList | Export-Csv -Path $path -NoTypeInformation -Delimiter "," -Encoding UTF8
+            Write-Log "Export saved to: $path"
+            [System.Windows.Forms.MessageBox]::Show("Export successful!", "Done")
+        } catch {
+            Write-Log "Export Error: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show("Export Failed: $($_.Exception.Message)", "Error")
+        } finally {
+            $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
+        }
     }
 }
 #endregion
@@ -694,6 +736,50 @@ function Unpublish-OrangeNumbersBatch {
     }
     return $successfulRows
 }
+
+function Merge-OrangeData {
+    param([System.Collections.Generic.List[Object]]$OrangeData)
+
+    Write-Log "Indexing Orange..."
+    $global:orangeHistoryMap = @{}
+    $orangeIndex = @{}
+    foreach ($oNum in $OrangeData) {
+        $key = [string]$oNum.number.Replace("+","").Trim()
+        $orangeIndex[$key] = $oNum
+        $global:orangeHistoryMap["+" + $key] = $oNum.history
+    }
+
+    Write-Log "Merging..."
+    $dt = $global:masterDataTable
+    $processedKeys = @{}
+
+    for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
+        $row = $dt.Rows[$i]
+        $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
+        if ($orangeIndex.ContainsKey($tKey)) {
+            $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
+            if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
+            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage
+            $processedKeys[$tKey] = $true
+        }
+        if ($i % 200 -eq 0) {
+            Update-ProgressUI -Current $i -Total $dt.Rows.Count -Activity "Merging Orange Data ($i/$($dt.Rows.Count))"
+        }
+    }
+
+    Write-Log "Adding Orange-only numbers..."
+    $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }
+    $idx = 0
+    foreach ($key in $missing) {
+        $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
+        if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
+        $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage
+        $dt.Rows.Add($row)
+        $idx++
+        if ($idx % 100 -eq 0) { Update-ProgressUI -Current $idx -Total $missing.Count -Activity "Adding New Numbers" }
+    }
+    Write-Log "Merge complete."
+}
 #endregion
 
 # =============================================================================
@@ -702,7 +788,7 @@ function Unpublish-OrangeNumbersBatch {
 
 #region 8. GUI Construction
 $global:form = New-Object System.Windows.Forms.Form
-$global:form.Text = "Teams Phone Manager v56.4"
+$global:form.Text = "Teams Phone Manager $($global:appVersion)"
 $global:form.Size = New-Object System.Drawing.Size(1600, 920) 
 $global:form.WindowState = "Maximized" # START MAXIMIZED
 $global:form.StartPosition = "CenterScreen"
@@ -940,19 +1026,55 @@ $btnHelp.ForeColor = "White"
 # --- Re-Add Logic Blocks ---
 $actionApplyFilter = {
     if ($dataGridView.DataSource -is [System.Data.DataTable]) {
-        $view = $dataGridView.DataSource.DefaultView; $filterParts = New-Object System.Collections.ArrayList
-        $rawVal = $txtFilter.Text.Trim(); 
+        $view = $dataGridView.DataSource.DefaultView
+        $filterParts = New-Object System.Collections.ArrayList
+        $rawVal = $txtFilter.Text.Trim()
+
         if (-not [string]::IsNullOrWhiteSpace($rawVal)) {
-            $safeVal = $rawVal.Replace("'", "''").Replace("[", "[[]").Replace("*", "[*]").Replace("%", "[%]"); $cols = $dataGridView.DataSource.Columns; $textFilterParts = New-Object System.Collections.ArrayList
-            foreach ($col in $cols) { [void]$textFilterParts.Add("[$($col.ColumnName)] LIKE '%$safeVal%'") }; [void]$filterParts.Add("(" + ($textFilterParts -join " OR ") + ")")
+            $safeVal = $rawVal.Replace("'", "''").Replace("[", "[[]").Replace("*", "[*]").Replace("%", "[%]")
+            $cols = $dataGridView.DataSource.Columns
+            $textFilterParts = New-Object System.Collections.ArrayList
+            foreach ($col in $cols) {
+                [void]$textFilterParts.Add("[$($col.ColumnName)] LIKE '%$safeVal%'")
+            }
+            [void]$filterParts.Add("(" + ($textFilterParts -join " OR ") + ")")
         }
-        if ($global:hideUnassigned) { [void]$filterParts.Add("(UserPrincipalName IS NOT NULL AND UserPrincipalName <> '')") }
-        $selectedTag = $global:cmbFilterTag.SelectedItem; if ($selectedTag -and $selectedTag -ne "All") { [void]$filterParts.Add("([Tag] LIKE '%$selectedTag%')") }
-        if ($filterParts.Count -gt 0) { try { $view.RowFilter = $filterParts -join " AND " } catch {} } else { $view.RowFilter = "" }; Update-Stats
+
+        if ($global:hideUnassigned) {
+            [void]$filterParts.Add("(UserPrincipalName IS NOT NULL AND UserPrincipalName <> '')")
+        }
+
+        $selectedTag = $global:cmbFilterTag.SelectedItem
+        if ($selectedTag -and $selectedTag -ne "All") {
+            [void]$filterParts.Add("([Tag] LIKE '%$selectedTag%')")
+        }
+
+        if ($filterParts.Count -gt 0) {
+            try { $view.RowFilter = $filterParts -join " AND " } catch {}
+        } else {
+            $view.RowFilter = ""
+        }
+        Update-Stats
     }
 }
-$btnApplyFilter.Add_Click($actionApplyFilter); $txtFilter.Add_KeyDown({ param($s, $e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { & $actionApplyFilter; $e.SuppressKeyPress = $true } }); $global:cmbFilterTag.Add_SelectionChangeCommitted($actionApplyFilter) 
-$btnToggleUnassigned.Add_Click({ $global:hideUnassigned = -not $global:hideUnassigned; if ($global:hideUnassigned) { $btnToggleUnassigned.Text = "Hide Unassigned"; $btnToggleUnassigned.BackColor = "#b3d9ff" } else { $btnToggleUnassigned.Text = "Hide Unassigned"; $btnToggleUnassigned.BackColor = "#e0e0e0" }; & $actionApplyFilter })
+
+$btnApplyFilter.Add_Click($actionApplyFilter)
+$txtFilter.Add_KeyDown({ param($s, $e)
+    if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { & $actionApplyFilter; $e.SuppressKeyPress = $true }
+})
+$global:cmbFilterTag.Add_SelectionChangeCommitted($actionApplyFilter)
+
+$btnToggleUnassigned.Add_Click({
+    $global:hideUnassigned = -not $global:hideUnassigned
+    if ($global:hideUnassigned) {
+        $btnToggleUnassigned.Text = "Show All"
+        $btnToggleUnassigned.BackColor = "#b3d9ff"
+    } else {
+        $btnToggleUnassigned.Text = "Hide Unassigned"
+        $btnToggleUnassigned.BackColor = "#e0e0e0"
+    }
+    & $actionApplyFilter
+})
 
 $btnGetFree.Add_Click({
     if ($dataGridView.Rows.Count -eq 0) { return }
@@ -963,17 +1085,50 @@ $btnGetFree.Add_Click({
 })
 
 $btnHelp.Add_Click({
-    $fHelp = New-Object System.Windows.Forms.Form; $fHelp.Text = "Help"; $fHelp.Size = New-Object System.Drawing.Size(800, 600); $fHelp.StartPosition = "CenterParent"
-    $txtHelp = New-Object System.Windows.Forms.TextBox; $txtHelp.Multiline = $true; $txtHelp.ReadOnly = $true; $txtHelp.Location = New-Object System.Drawing.Point(10, 10); $txtHelp.Size = New-Object System.Drawing.Size(760, 490); $txtHelp.ScrollBars = "Vertical"; $txtHelp.BackColor = "White"; $txtHelp.Font = New-Object System.Drawing.Font("Consolas", 10) 
-    $basePath = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }; $helpPath = Join-Path $basePath "help.txt"; if (Test-Path $helpPath) { try { $txtHelp.Text = Get-Content $helpPath -Raw -Encoding UTF8 } catch { $txtHelp.Text = "Error: $($_.Exception.Message)" } } else { $txtHelp.Text = "help.txt not found." }
-    $btnClose = New-Object System.Windows.Forms.Button; $btnClose.Text = "Close"; $btnClose.Location = New-Object System.Drawing.Point(350, 520); $btnClose.DialogResult = "OK"; $fHelp.Controls.AddRange(@($txtHelp, $btnClose)); $fHelp.Add_Shown({ $txtHelp.Select(0, 0); $btnClose.Focus() }); $fHelp.ShowDialog()
+    $fHelp = New-Object System.Windows.Forms.Form
+    $fHelp.Text = "Help"
+    $fHelp.Size = New-Object System.Drawing.Size(800, 600)
+    $fHelp.StartPosition = "CenterParent"
+
+    $txtHelp = New-Object System.Windows.Forms.TextBox
+    $txtHelp.Multiline = $true; $txtHelp.ReadOnly = $true
+    $txtHelp.Location = New-Object System.Drawing.Point(10, 10)
+    $txtHelp.Size = New-Object System.Drawing.Size(760, 490)
+    $txtHelp.ScrollBars = "Vertical"; $txtHelp.BackColor = "White"
+    $txtHelp.Font = New-Object System.Drawing.Font("Consolas", 10)
+
+    $basePath = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
+    $helpPath = Join-Path $basePath "help.txt"
+    if (Test-Path $helpPath) {
+        try { $txtHelp.Text = Get-Content $helpPath -Raw -Encoding UTF8 }
+        catch { $txtHelp.Text = "Error: $($_.Exception.Message)" }
+    } else {
+        $txtHelp.Text = "help.txt not found."
+    }
+
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = "Close"
+    $btnClose.Location = New-Object System.Drawing.Point(350, 520)
+    $btnClose.DialogResult = "OK"
+
+    $fHelp.Controls.AddRange(@($txtHelp, $btnClose))
+    $fHelp.Add_Shown({ $txtHelp.Select(0, 0); $btnClose.Focus() })
+    $fHelp.ShowDialog()
 })
 
 $grpTopActions.Controls.AddRange(@($btnConnect, $btnFetchData, $btnSyncOrange, $sepTop1, $btnExport, $btnGetFree, $sepFilter, $lblFilter, $txtFilter, $lblFilterTag, $global:cmbFilterTag, $btnApplyFilter, $btnToggleUnassigned, $btnSelectCols, $btnHelp))
 
 # -- Grid (Y Position shifted down to 160 to accommodate groupbox) --
 $gridY = 160
-$dataGridView = New-Object System.Windows.Forms.DataGridView; $dataGridView.Location = New-Object System.Drawing.Point(20, $gridY); $dataGridView.Size = New-Object System.Drawing.Size(1240, 610); $dataGridView.Anchor = "Top, Bottom, Left, Right"; $dataGridView.AllowUserToAddRows = $false; $dataGridView.SelectionMode = "FullRowSelect"; $dataGridView.MultiSelect = $true; $dataGridView.ReadOnly = $true; $dataGridView.AutoSizeColumnsMode = "AllCells"
+$dataGridView = New-Object System.Windows.Forms.DataGridView
+$dataGridView.Location = New-Object System.Drawing.Point(20, $gridY)
+$dataGridView.Size = New-Object System.Drawing.Size(1240, 610)
+$dataGridView.Anchor = "Top, Bottom, Left, Right"
+$dataGridView.AllowUserToAddRows = $false
+$dataGridView.SelectionMode = "FullRowSelect"
+$dataGridView.MultiSelect = $true
+$dataGridView.ReadOnly = $true
+$dataGridView.AutoSizeColumnsMode = "AllCells"
 $dataGridView.DefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(224, 224, 224) 
 $dataGridView.DefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::Black
 
@@ -1039,9 +1194,7 @@ $btnPublishOC = New-Object System.Windows.Forms.Button; $btnPublishOC.Location =
 # NEW BUTTON: Manual Publish (Shifted Right)
 $btnManualPublish = New-Object System.Windows.Forms.Button; $btnManualPublish.Location = New-Object System.Drawing.Point(1235, 17); $btnManualPublish.Size = New-Object System.Drawing.Size(110, 25); $btnManualPublish.Text = "Manual Publish"; $btnManualPublish.BackColor = "#4682B4"; $btnManualPublish.ForeColor = "White"
 
-$global:cbDebug = New-Object System.Windows.Forms.CheckBox; $global:cbDebug.Location = New-Object System.Drawing.Point(1370, 19); $global:cbDebug.Size = New-Object System.Drawing.Size(80, 20); $global:cbDebug.Text = "Debug"
-
-$grpTag.Controls.AddRange(@($lblTagInput, $global:cmbTag, $cbBlacklist, $cbReserved, $cbPremium, $btnApplyTag, $btnRemoveTags, $sepAction1, $btnAssign, $btnUnassign, $sepAction2, $btnRemove, $sepAction3, $btnReleaseOC, $btnPublishOC, $btnManualPublish, $global:cbDebug))
+$grpTag.Controls.AddRange(@($lblTagInput, $global:cmbTag, $cbBlacklist, $cbReserved, $cbPremium, $btnApplyTag, $btnRemoveTags, $sepAction1, $btnAssign, $btnUnassign, $sepAction2, $btnRemove, $sepAction3, $btnReleaseOC, $btnPublishOC, $btnManualPublish))
 #endregion
 
 # =============================================================================
@@ -1050,12 +1203,47 @@ $grpTag.Controls.AddRange(@($lblTagInput, $global:cmbTag, $cbBlacklist, $cbReser
 
 #region 9. Logic - General UI
 $btnSelectCols.Add_Click({
-    if ($dataGridView.DataSource -eq $null) { [System.Windows.Forms.MessageBox]::Show("Please load data first.", "Info"); return }
-    $frmCols = New-Object System.Windows.Forms.Form; $frmCols.Text = "Select Columns"; $frmCols.Size = New-Object System.Drawing.Size(300, 500); $frmCols.StartPosition = "CenterParent"; $frmCols.FormBorderStyle = "FixedDialog"
-    $clb = New-Object System.Windows.Forms.CheckedListBox; $clb.Location = New-Object System.Drawing.Point(10, 10); $clb.Size = New-Object System.Drawing.Size(260, 400); $clb.CheckOnClick = $true
-    foreach ($col in $dataGridView.Columns) { $state = if ($col.Visible) { [System.Windows.Forms.CheckState]::Checked } else { [System.Windows.Forms.CheckState]::Unchecked }; [void]$clb.Items.Add($col.Name, $state) }
-    $btnOkCols = New-Object System.Windows.Forms.Button; $btnOkCols.Text = "OK"; $btnOkCols.DialogResult = "OK"; $btnOkCols.Location = New-Object System.Drawing.Point(100, 420); $frmCols.Controls.Add($clb); $frmCols.Controls.Add($btnOkCols); $frmCols.AcceptButton = $btnOkCols
-    if ($frmCols.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor; $dataGridView.SuspendLayout(); for ($i = 0; $i -lt $clb.Items.Count; $i++) { $colName = $clb.Items[$i]; $isVisible = $clb.GetItemChecked($i); if ($colName -eq "TelephoneNumber") { $isVisible = $true }; $dataGridView.Columns[$colName].Visible = $isVisible }; $dataGridView.ResumeLayout(); $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }; $frmCols.Dispose()
+    if ($dataGridView.DataSource -eq $null) {
+        [System.Windows.Forms.MessageBox]::Show("Please load data first.", "Info"); return
+    }
+
+    $frmCols = New-Object System.Windows.Forms.Form
+    $frmCols.Text = "Select Columns"
+    $frmCols.Size = New-Object System.Drawing.Size(300, 500)
+    $frmCols.StartPosition = "CenterParent"
+    $frmCols.FormBorderStyle = "FixedDialog"
+
+    $clb = New-Object System.Windows.Forms.CheckedListBox
+    $clb.Location = New-Object System.Drawing.Point(10, 10)
+    $clb.Size = New-Object System.Drawing.Size(260, 400)
+    $clb.CheckOnClick = $true
+
+    foreach ($col in $dataGridView.Columns) {
+        $state = if ($col.Visible) { [System.Windows.Forms.CheckState]::Checked } else { [System.Windows.Forms.CheckState]::Unchecked }
+        [void]$clb.Items.Add($col.Name, $state)
+    }
+
+    $btnOkCols = New-Object System.Windows.Forms.Button
+    $btnOkCols.Text = "OK"
+    $btnOkCols.DialogResult = "OK"
+    $btnOkCols.Location = New-Object System.Drawing.Point(100, 420)
+    $frmCols.Controls.Add($clb)
+    $frmCols.Controls.Add($btnOkCols)
+    $frmCols.AcceptButton = $btnOkCols
+
+    if ($frmCols.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $dataGridView.SuspendLayout()
+        for ($i = 0; $i -lt $clb.Items.Count; $i++) {
+            $colName = $clb.Items[$i]
+            $isVisible = $clb.GetItemChecked($i)
+            if ($colName -eq "TelephoneNumber") { $isVisible = $true }
+            $dataGridView.Columns[$colName].Visible = $isVisible
+        }
+        $dataGridView.ResumeLayout()
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
+    $frmCols.Dispose()
 })
 #endregion
 
@@ -1142,7 +1330,6 @@ $btnFetchData.Add_Click({
         # 1. GET USERS
         Write-Log "Step 2/5: Fetching Teams Users..."
         Update-ProgressUI -Current 20 -Total 100 -Activity "Fetch Users"
-        Write-Debug "Executing: Get-CsOnlineUser -ResultSize 20000"
         $users = Get-CsOnlineUser -ResultSize 20000 -ErrorAction Stop
         
         Write-Log "  > Found $($users.Count) users. Building Index..."
@@ -1154,14 +1341,14 @@ $btnFetchData.Add_Click({
         Update-ProgressUI -Current 30 -Total 100 -Activity "Fetch Numbers"
         $allNumbers = New-Object System.Collections.ArrayList
         $batchSize = 1000; $skip = 0
-        while ($skip -lt 10000) {
-            Write-Debug "Executing: Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize"
+        while ($true) {
             $batch = Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize -ErrorAction Stop
             if (!$batch) { break }
             [void]$allNumbers.AddRange($batch)
             $skip += $batchSize
             Write-Log "  > Fetched batch. Total so far: $($allNumbers.Count)"
-            Update-ProgressUI -Current (30 + ($skip/200)) -Total 100 -Activity "Fetching Numbers ($($allNumbers.Count))"
+            $pct = [Math]::Min(55, 30 + [int]($allNumbers.Count / 100))
+            Update-ProgressUI -Current $pct -Total 100 -Activity "Fetching Numbers ($($allNumbers.Count))"
             if ($batch.Count -lt $batchSize) { break }
         }
 
@@ -1221,36 +1408,7 @@ $btnFetchData.Add_Click({
                     Write-Log "  > Orange data fetched ($($orangeData.Count) records)."
                 } catch { Write-Log "  > Orange Fetch Failed: $($_.Exception.Message). Showing Teams data only."; $orangeData = $null }
 
-                # Merge Logic
-                if ($orangeData) {
-                    Write-Log "  > Merging datasets..."
-                    $global:orangeHistoryMap = @{}; $orangeIndex = @{}
-                    foreach ($oNum in $orangeData) { $key = [string]$oNum.number.Replace("+","").Trim(); $orangeIndex[$key] = $oNum; $global:orangeHistoryMap["+" + $key] = $oNum.history }
-                    
-                    $dt = $global:masterDataTable; $processedKeys = @{}
-                    
-                    for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
-                        $row = $dt.Rows[$i]
-                        $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
-                        if ($orangeIndex.ContainsKey($tKey)) {
-                            $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
-                            if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $processedKeys[$tKey] = $true
-                        }
-                        if ($i % 200 -eq 0) { 
-                            Update-ProgressUI -Current (60 + (($i / $dt.Rows.Count) * 30)) -Total 100 -Activity "Merging Data ($i/$($dt.Rows.Count))"
-                        }
-                    }
-                    
-                    # Add Orange-only numbers
-                    Write-Log "  > Adding Orange-only numbers..."
-                    $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }
-                    foreach ($key in $missing) {
-                        $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite
-                        if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                        $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $dt.Rows.Add($row)
-                    }
-                }
+                if ($orangeData) { Merge-OrangeData -OrangeData $orangeData }
             }
         } else {
             Write-Log "Step 4/5: Skipping Orange Sync (API Key not populated)."
@@ -1300,34 +1458,17 @@ $btnSyncOrange.Add_Click({
     finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
 
     if ($orangeData) {
-        Write-Log "Indexing Orange..."; $global:orangeHistoryMap = @{}; $orangeIndex = @{}
-        foreach ($oNum in $orangeData) { $key = [string]$oNum.number.Replace("+","").Trim(); $orangeIndex[$key] = $oNum; $global:orangeHistoryMap["+" + $key] = $oNum.history }
-        Write-Log "Merging..."; $dt = $global:masterDataTable; $processedKeys = @{}
-        for ($i = 0; $i -lt $dt.Rows.Count; $i++) {
-            $row = $dt.Rows[$i]; $tKey = [string]$row["TelephoneNumber"].Replace("+","").Trim()
-            if ($orangeIndex.ContainsKey($tKey)) {
-                $oObj = $orangeIndex[$tKey]; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite; if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-                $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $processedKeys[$tKey] = $true
-            }
-            if ($i % 500 -eq 0) { Update-ProgressUI -Current $i -Total $dt.Rows.Count -Activity "Merging Orange Data" }
-        }
-        Write-Log "Adding new..."; $missing = $orangeIndex.Keys | Where-Object { -not $processedKeys.ContainsKey($_) }; $idx = 0
-        foreach ($key in $missing) {
-            $oObj = $orangeIndex[$key]; $row = $dt.NewRow(); $row["TelephoneNumber"] = "+" + $key; $siteName = ""; $siteId = ""; $vs = $oObj.voiceSite; if ($null -ne $vs) { $siteId = $vs.voiceSiteId; $siteName = $vs.technicalSiteName; if ([string]::IsNullOrWhiteSpace($siteId) -and $vs -is [System.Collections.IDictionary]) { $siteId = $vs['voiceSiteId']; $siteName = $vs['technicalSiteName'] } }
-            $row["OrangeSite"] = $siteName; $row["OrangeSiteId"] = $siteId; $row["OrangeStatus"] = $oObj.status; $row["OrangeUsage"] = $oObj.usage; $dt.Rows.Add($row); $idx++
-            if ($idx % 100 -eq 0) { Update-ProgressUI -Current $idx -Total $missing.Count -Activity "Adding New Numbers" }
-        }
-        $dataGridView.DataSource = $global:masterDataTable; Write-Log "Sync Complete."
-        
-        foreach ($hc in $global:defaultHiddenCols) { if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false } }
-        
-        # Update Dynamic Filters
-        Update-FilterTags
+        Merge-OrangeData -OrangeData $orangeData
 
+        $dataGridView.DataSource = $global:masterDataTable
+        foreach ($hc in $global:defaultHiddenCols) { if ($dataGridView.Columns[$hc]) { $dataGridView.Columns[$hc].Visible = $false } }
+
+        Update-FilterTags
         Update-Stats
         Update-TagStatistics
         Update-ProgressUI -Current 100 -Total 100 -Activity "Done"
         Reset-ProgressUI
+        Write-Log "Sync Complete."
     }
 })
 #endregion
@@ -1381,7 +1522,6 @@ $miRefreshTeams.Add_Click({
         Update-ProgressUI -Current $counter -Total $sel.Count -Activity "Refreshing Teams Info"
         $ph = $row.Cells["TelephoneNumber"].Value
         try {
-            Write-Debug "Executing: Get-CsPhoneNumberAssignment -TelephoneNumber $ph"
             $numData = Get-CsPhoneNumberAssignment -TelephoneNumber $ph -ErrorAction Stop
             
             if ($numData) {
@@ -1392,7 +1532,6 @@ $miRefreshTeams.Add_Click({
                 $userId = $numData.AssignedPstnTargetId
                 if (-not [string]::IsNullOrWhiteSpace($userId)) {
                     try {
-                        Write-Debug "Executing: Get-CsOnlineUser -Identity $userId"
                         $userData = Get-CsOnlineUser -Identity $userId -ErrorAction Stop
                         $row.Cells["UserPrincipalName"].Value = $userData.UserPrincipalName; $row.Cells["DisplayName"].Value = $userData.DisplayName
                         $row.Cells["OnlineVoiceRoutingPolicy"].Value = $userData.OnlineVoiceRoutingPolicy; $row.Cells["EnterpriseVoiceEnabled"].Value = $userData.EnterpriseVoiceEnabled
@@ -1497,7 +1636,6 @@ $miChangePolicy.Add_Click({
         try {
             $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
             Write-Log "Granting policy '$selectedPolicy' to $upn..."
-            Write-Debug "Executing: Grant-CsOnlineVoiceRoutingPolicy -Identity $upn -PolicyName $selectedPolicy"
             Grant-CsOnlineVoiceRoutingPolicy -Identity $upn -PolicyName $selectedPolicy -ErrorAction Stop
             Write-Log "Success. Updating grid..."
             $row.Cells["OnlineVoiceRoutingPolicy"].Value = $selectedPolicy
@@ -1526,7 +1664,6 @@ $miGrantMeetingPolicy.Add_Click({
         try {
             $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
             Write-Log "Granting meeting policy '$selectedPolicy' to $upn..."
-            Write-Debug "Executing: Grant-CsTeamsMeetingPolicy -Identity $upn -PolicyName '$selectedPolicy'"
             Grant-CsTeamsMeetingPolicy -Identity $upn -PolicyName $selectedPolicy -ErrorAction Stop
             Write-Log "Success. Updating grid..."
             $row.Cells["TeamsMeetingPolicy"].Value = $selectedPolicy
@@ -1564,7 +1701,6 @@ $miEnableEV.Add_Click({
         if (-not [string]::IsNullOrWhiteSpace($upn)) {
             try {
                 Write-Log "Enabling Enterprise Voice for $upn..."
-                Write-Debug "Executing: Set-CsPhoneNumberAssignment -Identity $upn -EnterpriseVoiceEnabled `$true"
                 Set-CsPhoneNumberAssignment -Identity $upn -EnterpriseVoiceEnabled $true -ErrorAction Stop
                 Write-Log "Success."
                 $row.Cells["EnterpriseVoiceEnabled"].Value = $true
@@ -1600,7 +1736,8 @@ $btnAssign.Add_Click({
     } else {
         # 3. Not a UPN, assume SamAccountName and lookup
         try {
-            $adUser = Get-ADUser -Filter "SamAccountName -eq '$inputUser'" -Properties UserPrincipalName -ErrorAction Stop
+            $safeInput = $inputUser.Replace("'", "''")
+            $adUser = Get-ADUser -Filter "SamAccountName -eq '$safeInput'" -Properties UserPrincipalName -ErrorAction Stop
             if ($adUser) {
                 $targetUpn = $adUser.UserPrincipalName
                 Write-Log "Resolved SamAccountName '$inputUser' to UPN '$targetUpn'"
@@ -1620,12 +1757,26 @@ $btnAssign.Add_Click({
     if ($null -eq $userObj) { [System.Windows.Forms.MessageBox]::Show("User '$upn' not found in downloaded index.", "Error", "OK", "Error"); return }
     try {
         $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor; Write-Log "Assigning $ph to $upn ($type)..."; 
-        Write-Debug "Executing: Set-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $ph -PhoneNumberType $type"
         Set-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $ph -PhoneNumberType $type -ErrorAction Stop; Write-Log "Teams Assignment Successful."
         $row.Cells["UserPrincipalName"].Value = $userObj.UserPrincipalName; $row.Cells["DisplayName"].Value = $userObj.DisplayName; $row.Cells["ActivationState"].Value = "Assigned"
-        Write-Log "Syncing to On-Prem AD..."; try { $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$upn'" -ErrorAction Stop; if ($adUser) { Set-ADUser -Identity $adUser -OfficePhone $ph -ErrorAction Stop; Write-Log "AD OfficePhone updated for $upn." } } catch { Write-Log "AD Sync Warning: $($_.Exception.Message)" }
-        Update-TagStatistics # Update stats
-    } catch { Write-Log "Assignment Failed: $($_.Exception.Message)"; [System.Windows.Forms.MessageBox]::Show("Assignment Failed: $($_.Exception.Message)", "Error") } finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
+        Write-Log "Syncing to On-Prem AD..."
+        try {
+            $safeUpn = $upn.Replace("'", "''")
+            $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeUpn'" -ErrorAction Stop
+            if ($adUser) {
+                Set-ADUser -Identity $adUser -OfficePhone $ph -ErrorAction Stop
+                Write-Log "AD OfficePhone updated for $upn."
+            }
+        } catch {
+            Write-Log "AD Sync Warning: $($_.Exception.Message)"
+        }
+        Update-TagStatistics
+    } catch {
+        Write-Log "Assignment Failed: $($_.Exception.Message)"
+        [System.Windows.Forms.MessageBox]::Show("Assignment Failed: $($_.Exception.Message)", "Error")
+    } finally {
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
 })
 
 $btnReleaseOC.Add_Click({
@@ -1657,14 +1808,14 @@ $btnReleaseOC.Add_Click({
         $upn = $row.Cells["UserPrincipalName"].Value; $phone = $row.Cells["TelephoneNumber"].Value; $numType = $row.Cells["NumberType"].Value
         if (-not [string]::IsNullOrWhiteSpace($upn)) { 
             Write-Log "Unassigning $phone from $upn..."; 
-            try { 
-                Write-Debug "Executing: Remove-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $phone -PhoneNumberType $numType"
-                Remove-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $phone -PhoneNumberType $numType -ErrorAction Stop; Write-Log "Unassigned $phone." 
+            try {
+                Remove-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $phone -PhoneNumberType $numType -ErrorAction Stop; Write-Log "Unassigned $phone."
                 
                 # NEW: Try to sync to AD (Clear OfficePhone)
                 Write-Log "Syncing to On-Prem AD (Clearing OfficePhone)..."
                 try {
-                    $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$upn'" -ErrorAction Stop
+                    $safeUpn = $upn.Replace("'", "''")
+                    $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeUpn'" -ErrorAction Stop
                     if ($adUser) {
                         Set-ADUser -Identity $adUser -Clear "telephoneNumber" -ErrorAction Stop
                         Write-Log "AD OfficePhone cleared for $upn."
@@ -1673,9 +1824,23 @@ $btnReleaseOC.Add_Click({
                     Write-Log "AD Sync Warning: $($_.Exception.Message)"
                 }
 
-            } catch { $errMsg = $_.Exception.Message; if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") { Write-Log "Detected On-Prem user. Clearing AD attributes..."; try { Set-ADUser -Identity $upn -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop; Write-Log "Success: AD attributes cleared." } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." } } else { Write-Log "Failed unassign: ${phone}: $errMsg" }; continue } }
+            } catch {
+                $errMsg = $_.Exception.Message
+                if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") {
+                    Write-Log "Detected On-Prem user. Clearing AD attributes..."
+                    try {
+                        Set-ADUser -Identity $upn -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop
+                        Write-Log "Success: AD attributes cleared."
+                    } catch {
+                        Write-Log "Failed to clear AD attributes: $($_.Exception.Message)."
+                    }
+                } else {
+                    Write-Log "Failed unassign: ${phone}: $errMsg"
+                }
+                continue
+            } }
     }
-    
+
     Update-ProgressUI -Current 0 -Total 100 -Activity "Releasing from OC"
     $successfulRows = Unpublish-OrangeNumbersBatch -RowObjects $rowsToProcess
     
@@ -1782,8 +1947,21 @@ $btnManualPublish.Add_Click({
     }
 })
 
-$dataGridView.Add_CellFormatting({ param($s,$e) if($e.ColumnIndex -ge 0 -and $dataGridView.Columns[$e.ColumnIndex].Name -match "^Orange") { $e.CellStyle.BackColor = [System.Drawing.Color]::Bisque } })
-$dataGridView.Add_CellDoubleClick({ param($s,$e) if($e.RowIndex -ge 0){ $p=$dataGridView.Rows[$e.RowIndex].Cells["TelephoneNumber"].Value; Write-Log "-- $p --"; if($global:orangeHistoryMap[$p]){$global:orangeHistoryMap[$p] | ForEach-Object {Write-Log "$($_.date) | $($_.status)"}} } })
+$dataGridView.Add_CellFormatting({ param($s, $e)
+    if ($e.ColumnIndex -ge 0 -and $dataGridView.Columns[$e.ColumnIndex].Name -match "^Orange") {
+        $e.CellStyle.BackColor = [System.Drawing.Color]::Bisque
+    }
+})
+
+$dataGridView.Add_CellDoubleClick({ param($s, $e)
+    if ($e.RowIndex -ge 0) {
+        $p = $dataGridView.Rows[$e.RowIndex].Cells["TelephoneNumber"].Value
+        Write-Log "-- $p --"
+        if ($global:orangeHistoryMap[$p]) {
+            $global:orangeHistoryMap[$p] | ForEach-Object { Write-Log "$($_.date) | $($_.status)" }
+        }
+    }
+})
 #endregion
 
 #region 13. Logic - Tagging Operations
@@ -1801,12 +1979,47 @@ $btnApplyTag.Add_Click({
         
         $ph = $r.Cells["TelephoneNumber"].Value; $currentTagStr = [string]$r.Cells["Tag"].Value
         if ([string]::IsNullOrWhiteSpace($currentTagStr)) { $currentTags = @() } else { $currentTags = $currentTagStr -split "," | ForEach-Object { $_.Trim() } }
-        $tagsToRemove = @(); $tagsToAdd = @()
+        $tagsToRemove = @()
+        $tagsToAdd = @()
+
+        # Determine location tag swap
         $newLocationTag = $desiredTags | Where-Object { $global:allowedTags -contains $_ } | Select-Object -First 1
-        if ($newLocationTag) { $oldLocationTag = $currentTags | Where-Object { $global:allowedTags -contains $_ } | Select-Object -First 1; if ($oldLocationTag -and $oldLocationTag -ne $newLocationTag) { $tagsToRemove += $oldLocationTag } }
-        $specialTags = @("Blacklist", "Reserved", "Premium"); foreach ($st in $specialTags) { $isDesired = $desiredTags -contains $st; $isCurrent = $currentTags -contains $st; if ($isCurrent -and -not $isDesired) { $tagsToRemove += $st }; if ($isDesired -and -not $isCurrent) { $tagsToAdd += $st } }
-        if ($newLocationTag) { if (-not ($currentTags -contains $newLocationTag)) { $tagsToAdd += $newLocationTag } }
-        try { foreach ($t in $tagsToRemove) { Write-Log "Removing tag '$t' from $ph..."; Write-Debug "Executing: Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t"; Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; foreach ($t in $tagsToAdd) { Write-Log "Adding tag '$t' to $ph..."; Write-Debug "Executing: Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t"; Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; $finalTags = $currentTags | Where-Object { -not ($tagsToRemove -contains $_) }; $finalTags += $tagsToAdd; $r.Cells["Tag"].Value = ($finalTags | Sort-Object | Get-Unique) -join ", "; if ($tagsToAdd.Count -eq 0 -and $tagsToRemove.Count -eq 0) { Write-Log "No tag changes needed for $ph." } else { Write-Log "Tags updated for $ph." } } catch { Write-Log "Failed to update tags for ${ph}: $($_.Exception.Message)" }
+        if ($newLocationTag) {
+            $oldLocationTag = $currentTags | Where-Object { $global:allowedTags -contains $_ } | Select-Object -First 1
+            if ($oldLocationTag -and $oldLocationTag -ne $newLocationTag) { $tagsToRemove += $oldLocationTag }
+            if (-not ($currentTags -contains $newLocationTag)) { $tagsToAdd += $newLocationTag }
+        }
+
+        # Determine special tag changes
+        $specialTags = @("Blacklist", "Reserved", "Premium")
+        foreach ($st in $specialTags) {
+            $isDesired = $desiredTags -contains $st
+            $isCurrent = $currentTags -contains $st
+            if ($isCurrent -and -not $isDesired) { $tagsToRemove += $st }
+            if ($isDesired -and -not $isCurrent) { $tagsToAdd += $st }
+        }
+
+        # Apply tag changes via API
+        try {
+            foreach ($t in $tagsToRemove) {
+                Write-Log "Removing tag '$t' from $ph..."
+                Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop
+            }
+            foreach ($t in $tagsToAdd) {
+                Write-Log "Adding tag '$t' to $ph..."
+                Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop
+            }
+            $finalTags = $currentTags | Where-Object { -not ($tagsToRemove -contains $_) }
+            $finalTags += $tagsToAdd
+            $r.Cells["Tag"].Value = ($finalTags | Sort-Object | Get-Unique) -join ", "
+            if ($tagsToAdd.Count -eq 0 -and $tagsToRemove.Count -eq 0) {
+                Write-Log "No tag changes needed for $ph."
+            } else {
+                Write-Log "Tags updated for $ph."
+            }
+        } catch {
+            Write-Log "Failed to update tags for ${ph}: $($_.Exception.Message)"
+        }
     }
     Update-SelectedRows -Rows $sel
     Update-TagStatistics # Update stats
@@ -1835,10 +2048,9 @@ $btnRemoveTags.Add_Click({
         $currentTags = $currentTagStr -split "," | ForEach-Object { $_.Trim() }
         
         try { 
-            foreach ($t in $currentTags) { 
-                Write-Log "Removing tag '$t' from $ph..."; 
-                Write-Debug "Executing: Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t"; 
-                Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop 
+            foreach ($t in $currentTags) {
+                Write-Log "Removing tag '$t' from $ph...";
+                Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop
             }
             $r.Cells["Tag"].Value = "" # Clear in grid
             Write-Log "All tags cleared for $ph."
@@ -1882,15 +2094,15 @@ $btnUnassign.Add_Click({
             
             if (-not [string]::IsNullOrWhiteSpace($u)) { 
                 Write-Log "Unassigning $p ($u)..."; 
-                try { 
-                    Write-Debug "Executing: Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t"
-                    Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop; 
-                    Write-Log "Unassigned $p." 
+                try {
+                    Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop;
+                    Write-Log "Unassigned $p."
                     
                     # NEW: Try to sync to AD (Clear OfficePhone)
                     Write-Log "Syncing to On-Prem AD (Clearing OfficePhone)..."
                     try {
-                        $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$u'" -ErrorAction Stop
+                        $safeU = $u.Replace("'", "''")
+                        $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeU'" -ErrorAction Stop
                         if ($adUser) {
                             Set-ADUser -Identity $adUser -Clear "telephoneNumber" -ErrorAction Stop
                             Write-Log "AD OfficePhone cleared for $u."
@@ -1898,16 +2110,17 @@ $btnUnassign.Add_Click({
                     } catch {
                         Write-Log "AD Sync Warning: $($_.Exception.Message)"
                     }
-                    
-                } catch { 
-                    $errMsg = $_.Exception.Message; 
-                    if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") { 
+
+                } catch {
+                    $errMsg = $_.Exception.Message;
+                    if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") {
                         Write-Log "Detected On-Prem user. Clearing AD attributes..."
-                        try { 
-                            Get-ADUser -Filter "UserPrincipalName -eq '$u'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop; 
-                            Write-Log "Success: AD attributes cleared." 
-                        } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." } 
-                    } else { Write-Log "Error unassigning ${p}: $errMsg" } 
+                        try {
+                            $safeU = $u.Replace("'", "''")
+                            Get-ADUser -Filter "UserPrincipalName -eq '$safeU'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop;
+                            Write-Log "Success: AD attributes cleared."
+                        } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." }
+                    } else { Write-Log "Error unassigning ${p}: $errMsg" }
                 } 
             } else { Write-Log "Skipped $p (Not assigned)." } 
         }; 
@@ -1934,7 +2147,7 @@ $btnRemove.Add_Click({
     $confirmMsg = "WARNING: You are about to permanently REMOVE $($rowsToProcess.Count) phone number(s) from your tenant.`n`nThis action cannot be undone. The numbers will be released back to the provider or lost.`n`nAny assigned users will be unassigned first.`n`nAre you absolutely sure?"
 
     if ([System.Windows.Forms.MessageBox]::Show($confirmMsg,"Permanent Removal","YesNo","Error") -eq "Yes"){ 
-        $toRemove=@(); Write-Log "Removing $($rowsToProcess.Count) number(s)..."
+        $toRemove = New-Object System.Collections.ArrayList; Write-Log "Removing $($rowsToProcess.Count) number(s)..."
         $counter = 0
         foreach($r in $rowsToProcess){ 
             $counter++
@@ -1947,23 +2160,22 @@ $btnRemove.Add_Click({
             try{ 
                 if (-not [string]::IsNullOrWhiteSpace($u)) { 
                     Write-Log "  Unassigning user first..."; 
-                    try { 
-                        Write-Debug "Executing: Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t"
-                        Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop 
+                    try {
+                        Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop
                     } catch { 
                         $errMsg = $_.Exception.Message; 
                         if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") { 
                             Write-Log "Detected On-Prem user. Clearing AD attributes..."
-                            try { 
-                                Get-ADUser -Filter "UserPrincipalName -eq '$u'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop; 
-                                Write-Log "Success: AD attributes cleared." 
-                            } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." } 
-                        } else { throw $_ } 
-                    } 
+                            try {
+                                $safeU = $u.Replace("'", "''")
+                                Get-ADUser -Filter "UserPrincipalName -eq '$safeU'" -Properties msRTCSIP-Line, telephoneNumber -ErrorAction Stop | Set-ADUser -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop;
+                                Write-Log "Success: AD attributes cleared."
+                            } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." }
+                        } else { throw $_ }
+                    }
                 }; 
-                Write-Debug "Executing: Remove-CsOnlineTelephoneNumber -TelephoneNumber $p"
                 Remove-CsOnlineTelephoneNumber -TelephoneNumber ([string[]]@($p)) -ErrorAction Stop; 
-                $toRemove += $r; 
+                [void]$toRemove.Add($r);
                 Write-Log "Removed $p." 
             } catch { Write-Log "Error removing ${p}: $($_.Exception.Message)" } 
         }; 
