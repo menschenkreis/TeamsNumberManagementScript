@@ -143,12 +143,6 @@ function Write-Log($message) {
     }
 }
 
-function Write-Debug($message) {
-    if ($global:cbDebug.Checked) {
-        Write-Log "[DEBUG] $message"
-    }
-}
-
 # --- HELPER: CHECK BLACKLIST ---
 function Test-IsBlacklisted {
     param([System.Windows.Forms.DataGridViewRow]$Row)
@@ -952,7 +946,7 @@ $actionApplyFilter = {
     }
 }
 $btnApplyFilter.Add_Click($actionApplyFilter); $txtFilter.Add_KeyDown({ param($s, $e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { & $actionApplyFilter; $e.SuppressKeyPress = $true } }); $global:cmbFilterTag.Add_SelectionChangeCommitted($actionApplyFilter) 
-$btnToggleUnassigned.Add_Click({ $global:hideUnassigned = -not $global:hideUnassigned; if ($global:hideUnassigned) { $btnToggleUnassigned.Text = "Hide Unassigned"; $btnToggleUnassigned.BackColor = "#b3d9ff" } else { $btnToggleUnassigned.Text = "Hide Unassigned"; $btnToggleUnassigned.BackColor = "#e0e0e0" }; & $actionApplyFilter })
+$btnToggleUnassigned.Add_Click({ $global:hideUnassigned = -not $global:hideUnassigned; if ($global:hideUnassigned) { $btnToggleUnassigned.Text = "Show All"; $btnToggleUnassigned.BackColor = "#b3d9ff" } else { $btnToggleUnassigned.Text = "Hide Unassigned"; $btnToggleUnassigned.BackColor = "#e0e0e0" }; & $actionApplyFilter })
 
 $btnGetFree.Add_Click({
     if ($dataGridView.Rows.Count -eq 0) { return }
@@ -1039,9 +1033,7 @@ $btnPublishOC = New-Object System.Windows.Forms.Button; $btnPublishOC.Location =
 # NEW BUTTON: Manual Publish (Shifted Right)
 $btnManualPublish = New-Object System.Windows.Forms.Button; $btnManualPublish.Location = New-Object System.Drawing.Point(1235, 17); $btnManualPublish.Size = New-Object System.Drawing.Size(110, 25); $btnManualPublish.Text = "Manual Publish"; $btnManualPublish.BackColor = "#4682B4"; $btnManualPublish.ForeColor = "White"
 
-$global:cbDebug = New-Object System.Windows.Forms.CheckBox; $global:cbDebug.Location = New-Object System.Drawing.Point(1370, 19); $global:cbDebug.Size = New-Object System.Drawing.Size(80, 20); $global:cbDebug.Text = "Debug"
-
-$grpTag.Controls.AddRange(@($lblTagInput, $global:cmbTag, $cbBlacklist, $cbReserved, $cbPremium, $btnApplyTag, $btnRemoveTags, $sepAction1, $btnAssign, $btnUnassign, $sepAction2, $btnRemove, $sepAction3, $btnReleaseOC, $btnPublishOC, $btnManualPublish, $global:cbDebug))
+$grpTag.Controls.AddRange(@($lblTagInput, $global:cmbTag, $cbBlacklist, $cbReserved, $cbPremium, $btnApplyTag, $btnRemoveTags, $sepAction1, $btnAssign, $btnUnassign, $sepAction2, $btnRemove, $sepAction3, $btnReleaseOC, $btnPublishOC, $btnManualPublish))
 #endregion
 
 # =============================================================================
@@ -1142,7 +1134,6 @@ $btnFetchData.Add_Click({
         # 1. GET USERS
         Write-Log "Step 2/5: Fetching Teams Users..."
         Update-ProgressUI -Current 20 -Total 100 -Activity "Fetch Users"
-        Write-Debug "Executing: Get-CsOnlineUser -ResultSize 20000"
         $users = Get-CsOnlineUser -ResultSize 20000 -ErrorAction Stop
         
         Write-Log "  > Found $($users.Count) users. Building Index..."
@@ -1155,7 +1146,6 @@ $btnFetchData.Add_Click({
         $allNumbers = New-Object System.Collections.ArrayList
         $batchSize = 1000; $skip = 0
         while ($skip -lt 10000) {
-            Write-Debug "Executing: Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize"
             $batch = Get-CsPhoneNumberAssignment -Skip $skip -Top $batchSize -ErrorAction Stop
             if (!$batch) { break }
             [void]$allNumbers.AddRange($batch)
@@ -1381,7 +1371,6 @@ $miRefreshTeams.Add_Click({
         Update-ProgressUI -Current $counter -Total $sel.Count -Activity "Refreshing Teams Info"
         $ph = $row.Cells["TelephoneNumber"].Value
         try {
-            Write-Debug "Executing: Get-CsPhoneNumberAssignment -TelephoneNumber $ph"
             $numData = Get-CsPhoneNumberAssignment -TelephoneNumber $ph -ErrorAction Stop
             
             if ($numData) {
@@ -1392,7 +1381,6 @@ $miRefreshTeams.Add_Click({
                 $userId = $numData.AssignedPstnTargetId
                 if (-not [string]::IsNullOrWhiteSpace($userId)) {
                     try {
-                        Write-Debug "Executing: Get-CsOnlineUser -Identity $userId"
                         $userData = Get-CsOnlineUser -Identity $userId -ErrorAction Stop
                         $row.Cells["UserPrincipalName"].Value = $userData.UserPrincipalName; $row.Cells["DisplayName"].Value = $userData.DisplayName
                         $row.Cells["OnlineVoiceRoutingPolicy"].Value = $userData.OnlineVoiceRoutingPolicy; $row.Cells["EnterpriseVoiceEnabled"].Value = $userData.EnterpriseVoiceEnabled
@@ -1497,7 +1485,6 @@ $miChangePolicy.Add_Click({
         try {
             $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
             Write-Log "Granting policy '$selectedPolicy' to $upn..."
-            Write-Debug "Executing: Grant-CsOnlineVoiceRoutingPolicy -Identity $upn -PolicyName $selectedPolicy"
             Grant-CsOnlineVoiceRoutingPolicy -Identity $upn -PolicyName $selectedPolicy -ErrorAction Stop
             Write-Log "Success. Updating grid..."
             $row.Cells["OnlineVoiceRoutingPolicy"].Value = $selectedPolicy
@@ -1526,7 +1513,6 @@ $miGrantMeetingPolicy.Add_Click({
         try {
             $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
             Write-Log "Granting meeting policy '$selectedPolicy' to $upn..."
-            Write-Debug "Executing: Grant-CsTeamsMeetingPolicy -Identity $upn -PolicyName '$selectedPolicy'"
             Grant-CsTeamsMeetingPolicy -Identity $upn -PolicyName $selectedPolicy -ErrorAction Stop
             Write-Log "Success. Updating grid..."
             $row.Cells["TeamsMeetingPolicy"].Value = $selectedPolicy
@@ -1564,7 +1550,6 @@ $miEnableEV.Add_Click({
         if (-not [string]::IsNullOrWhiteSpace($upn)) {
             try {
                 Write-Log "Enabling Enterprise Voice for $upn..."
-                Write-Debug "Executing: Set-CsPhoneNumberAssignment -Identity $upn -EnterpriseVoiceEnabled `$true"
                 Set-CsPhoneNumberAssignment -Identity $upn -EnterpriseVoiceEnabled $true -ErrorAction Stop
                 Write-Log "Success."
                 $row.Cells["EnterpriseVoiceEnabled"].Value = $true
@@ -1600,7 +1585,8 @@ $btnAssign.Add_Click({
     } else {
         # 3. Not a UPN, assume SamAccountName and lookup
         try {
-            $adUser = Get-ADUser -Filter "SamAccountName -eq '$inputUser'" -Properties UserPrincipalName -ErrorAction Stop
+            $safeInput = $inputUser.Replace("'", "''")
+            $adUser = Get-ADUser -Filter "SamAccountName -eq '$safeInput'" -Properties UserPrincipalName -ErrorAction Stop
             if ($adUser) {
                 $targetUpn = $adUser.UserPrincipalName
                 Write-Log "Resolved SamAccountName '$inputUser' to UPN '$targetUpn'"
@@ -1620,7 +1606,6 @@ $btnAssign.Add_Click({
     if ($null -eq $userObj) { [System.Windows.Forms.MessageBox]::Show("User '$upn' not found in downloaded index.", "Error", "OK", "Error"); return }
     try {
         $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor; Write-Log "Assigning $ph to $upn ($type)..."; 
-        Write-Debug "Executing: Set-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $ph -PhoneNumberType $type"
         Set-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $ph -PhoneNumberType $type -ErrorAction Stop; Write-Log "Teams Assignment Successful."
         $row.Cells["UserPrincipalName"].Value = $userObj.UserPrincipalName; $row.Cells["DisplayName"].Value = $userObj.DisplayName; $row.Cells["ActivationState"].Value = "Assigned"
         Write-Log "Syncing to On-Prem AD..."; try { $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$upn'" -ErrorAction Stop; if ($adUser) { Set-ADUser -Identity $adUser -OfficePhone $ph -ErrorAction Stop; Write-Log "AD OfficePhone updated for $upn." } } catch { Write-Log "AD Sync Warning: $($_.Exception.Message)" }
@@ -1657,9 +1642,8 @@ $btnReleaseOC.Add_Click({
         $upn = $row.Cells["UserPrincipalName"].Value; $phone = $row.Cells["TelephoneNumber"].Value; $numType = $row.Cells["NumberType"].Value
         if (-not [string]::IsNullOrWhiteSpace($upn)) { 
             Write-Log "Unassigning $phone from $upn..."; 
-            try { 
-                Write-Debug "Executing: Remove-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $phone -PhoneNumberType $numType"
-                Remove-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $phone -PhoneNumberType $numType -ErrorAction Stop; Write-Log "Unassigned $phone." 
+            try {
+                Remove-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $phone -PhoneNumberType $numType -ErrorAction Stop; Write-Log "Unassigned $phone."
                 
                 # NEW: Try to sync to AD (Clear OfficePhone)
                 Write-Log "Syncing to On-Prem AD (Clearing OfficePhone)..."
@@ -1806,7 +1790,7 @@ $btnApplyTag.Add_Click({
         if ($newLocationTag) { $oldLocationTag = $currentTags | Where-Object { $global:allowedTags -contains $_ } | Select-Object -First 1; if ($oldLocationTag -and $oldLocationTag -ne $newLocationTag) { $tagsToRemove += $oldLocationTag } }
         $specialTags = @("Blacklist", "Reserved", "Premium"); foreach ($st in $specialTags) { $isDesired = $desiredTags -contains $st; $isCurrent = $currentTags -contains $st; if ($isCurrent -and -not $isDesired) { $tagsToRemove += $st }; if ($isDesired -and -not $isCurrent) { $tagsToAdd += $st } }
         if ($newLocationTag) { if (-not ($currentTags -contains $newLocationTag)) { $tagsToAdd += $newLocationTag } }
-        try { foreach ($t in $tagsToRemove) { Write-Log "Removing tag '$t' from $ph..."; Write-Debug "Executing: Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t"; Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; foreach ($t in $tagsToAdd) { Write-Log "Adding tag '$t' to $ph..."; Write-Debug "Executing: Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t"; Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; $finalTags = $currentTags | Where-Object { -not ($tagsToRemove -contains $_) }; $finalTags += $tagsToAdd; $r.Cells["Tag"].Value = ($finalTags | Sort-Object | Get-Unique) -join ", "; if ($tagsToAdd.Count -eq 0 -and $tagsToRemove.Count -eq 0) { Write-Log "No tag changes needed for $ph." } else { Write-Log "Tags updated for $ph." } } catch { Write-Log "Failed to update tags for ${ph}: $($_.Exception.Message)" }
+        try { foreach ($t in $tagsToRemove) { Write-Log "Removing tag '$t' from $ph..."; Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; foreach ($t in $tagsToAdd) { Write-Log "Adding tag '$t' to $ph..."; Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; $finalTags = $currentTags | Where-Object { -not ($tagsToRemove -contains $_) }; $finalTags += $tagsToAdd; $r.Cells["Tag"].Value = ($finalTags | Sort-Object | Get-Unique) -join ", "; if ($tagsToAdd.Count -eq 0 -and $tagsToRemove.Count -eq 0) { Write-Log "No tag changes needed for $ph." } else { Write-Log "Tags updated for $ph." } } catch { Write-Log "Failed to update tags for ${ph}: $($_.Exception.Message)" }
     }
     Update-SelectedRows -Rows $sel
     Update-TagStatistics # Update stats
@@ -1835,10 +1819,9 @@ $btnRemoveTags.Add_Click({
         $currentTags = $currentTagStr -split "," | ForEach-Object { $_.Trim() }
         
         try { 
-            foreach ($t in $currentTags) { 
-                Write-Log "Removing tag '$t' from $ph..."; 
-                Write-Debug "Executing: Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t"; 
-                Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop 
+            foreach ($t in $currentTags) {
+                Write-Log "Removing tag '$t' from $ph...";
+                Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop
             }
             $r.Cells["Tag"].Value = "" # Clear in grid
             Write-Log "All tags cleared for $ph."
@@ -1882,10 +1865,9 @@ $btnUnassign.Add_Click({
             
             if (-not [string]::IsNullOrWhiteSpace($u)) { 
                 Write-Log "Unassigning $p ($u)..."; 
-                try { 
-                    Write-Debug "Executing: Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t"
-                    Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop; 
-                    Write-Log "Unassigned $p." 
+                try {
+                    Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop;
+                    Write-Log "Unassigned $p."
                     
                     # NEW: Try to sync to AD (Clear OfficePhone)
                     Write-Log "Syncing to On-Prem AD (Clearing OfficePhone)..."
@@ -1934,7 +1916,7 @@ $btnRemove.Add_Click({
     $confirmMsg = "WARNING: You are about to permanently REMOVE $($rowsToProcess.Count) phone number(s) from your tenant.`n`nThis action cannot be undone. The numbers will be released back to the provider or lost.`n`nAny assigned users will be unassigned first.`n`nAre you absolutely sure?"
 
     if ([System.Windows.Forms.MessageBox]::Show($confirmMsg,"Permanent Removal","YesNo","Error") -eq "Yes"){ 
-        $toRemove=@(); Write-Log "Removing $($rowsToProcess.Count) number(s)..."
+        $toRemove = New-Object System.Collections.ArrayList; Write-Log "Removing $($rowsToProcess.Count) number(s)..."
         $counter = 0
         foreach($r in $rowsToProcess){ 
             $counter++
@@ -1947,9 +1929,8 @@ $btnRemove.Add_Click({
             try{ 
                 if (-not [string]::IsNullOrWhiteSpace($u)) { 
                     Write-Log "  Unassigning user first..."; 
-                    try { 
-                        Write-Debug "Executing: Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t"
-                        Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop 
+                    try {
+                        Remove-CsPhoneNumberAssignment -Identity $u -PhoneNumber $p -PhoneNumberType $t -ErrorAction Stop
                     } catch { 
                         $errMsg = $_.Exception.Message; 
                         if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") { 
@@ -1961,9 +1942,8 @@ $btnRemove.Add_Click({
                         } else { throw $_ } 
                     } 
                 }; 
-                Write-Debug "Executing: Remove-CsOnlineTelephoneNumber -TelephoneNumber $p"
                 Remove-CsOnlineTelephoneNumber -TelephoneNumber ([string[]]@($p)) -ErrorAction Stop; 
-                $toRemove += $r; 
+                [void]$toRemove.Add($r);
                 Write-Log "Removed $p." 
             } catch { Write-Log "Error removing ${p}: $($_.Exception.Message)" } 
         }; 
