@@ -1,5 +1,5 @@
 # =============================================================================
-# TEAMS PHONE MANAGER v56.4 (UI Spacing & Centering)
+# TEAMS PHONE MANAGER v57.0 (UI Polish & Modernization)
 # =============================================================================
 
 #region 1. Cleanup & Assemblies
@@ -30,7 +30,7 @@ $global:form = $null
 $global:voiceRoutingPolicies = @()
 $global:teamsMeetingPolicies = @()
 $global:hideUnassigned = $false
-$global:appVersion = "v56.4"
+$global:appVersion = "v57.0"
 
 # --- SETTINGS GLOBALS ---
 $global:settingsXmlPath = $null
@@ -794,6 +794,12 @@ $global:form.WindowState = "Maximized" # START MAXIMIZED
 $global:form.StartPosition = "CenterScreen"
 $global:form.BackColor = "#F0F0F0"
 
+# --- ToolTip Component ---
+$toolTip = New-Object System.Windows.Forms.ToolTip
+$toolTip.AutoPopDelay = 5000
+$toolTip.InitialDelay = 400
+$toolTip.ReshowDelay = 200
+
 # --- CONFIGURATION GROUP ---
 $grpConfig = New-Object System.Windows.Forms.GroupBox
 $grpConfig.Location = New-Object System.Drawing.Point(20, 10)
@@ -839,8 +845,8 @@ $global:txtProxy.Location = New-Object System.Drawing.Point(760, 28)
 $global:txtProxy.Size = New-Object System.Drawing.Size(150, 20); $global:txtProxy.Text = ""
 
 # Buttons (Y=28)
-$btnLoadXml = New-Object System.Windows.Forms.Button; $btnLoadXml.Location = New-Object System.Drawing.Point(940, 28); $btnLoadXml.Size = New-Object System.Drawing.Size(80, 25); $btnLoadXml.Text = "Load XML"
-$btnSaveXml = New-Object System.Windows.Forms.Button; $btnSaveXml.Location = New-Object System.Drawing.Point(1030, 28); $btnSaveXml.Size = New-Object System.Drawing.Size(80, 25); $btnSaveXml.Text = "Save XML"
+$btnLoadXml = New-Object System.Windows.Forms.Button; $btnLoadXml.Location = New-Object System.Drawing.Point(940, 28); $btnLoadXml.Size = New-Object System.Drawing.Size(80, 25); $btnLoadXml.Text = "Load XML"; $btnLoadXml.FlatStyle = "Flat"; $btnLoadXml.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(180,180,180)
+$btnSaveXml = New-Object System.Windows.Forms.Button; $btnSaveXml.Location = New-Object System.Drawing.Point(1030, 28); $btnSaveXml.Size = New-Object System.Drawing.Size(80, 25); $btnSaveXml.Text = "Save XML"; $btnSaveXml.FlatStyle = "Flat"; $btnSaveXml.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(180,180,180)
 
 # UPDATED: Moved Help Button to the far right (1120) to utilize new width
 $btnOrangeHelp = New-Object System.Windows.Forms.Button
@@ -849,6 +855,7 @@ $btnOrangeHelp.Size = New-Object System.Drawing.Size(100, 25)
 $btnOrangeHelp.Text = "Get API Help"
 $btnOrangeHelp.BackColor = "#17a2b8"
 $btnOrangeHelp.ForeColor = "White"
+$btnOrangeHelp.FlatStyle = "Flat"; $btnOrangeHelp.FlatAppearance.BorderSize = 0
 $btnOrangeHelp.Add_Click({ Start-Process "https://developer.orange.com/apis/businesstalk/getting-started" })
 
 # Events
@@ -862,7 +869,7 @@ $grpConfig.Controls.AddRange(@($lblAuth, $global:txtOrangeAuth, $lblCust, $globa
 
 # -- Log Box --
 $grpLog = New-Object System.Windows.Forms.GroupBox; $grpLog.Location = New-Object System.Drawing.Point(1280, 10); $grpLog.Size = New-Object System.Drawing.Size(290, 380); $grpLog.Text = "Execution Log"; $grpLog.Anchor = "Top, Right"
-$global:txtLog = New-Object System.Windows.Forms.TextBox; $global:txtLog.Location = New-Object System.Drawing.Point(10, 20); $global:txtLog.Size = New-Object System.Drawing.Size(270, 350); $global:txtLog.Multiline = $true; $global:txtLog.ScrollBars = "Vertical"; $global:txtLog.ReadOnly = $true; $global:txtLog.BackColor = "White"; $global:txtLog.Anchor = "Top, Bottom, Left, Right"
+$global:txtLog = New-Object System.Windows.Forms.TextBox; $global:txtLog.Location = New-Object System.Drawing.Point(10, 20); $global:txtLog.Size = New-Object System.Drawing.Size(270, 350); $global:txtLog.Multiline = $true; $global:txtLog.ScrollBars = "Vertical"; $global:txtLog.ReadOnly = $true; $global:txtLog.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30); $global:txtLog.ForeColor = [System.Drawing.Color]::FromArgb(210, 210, 210); $global:txtLog.Font = New-Object System.Drawing.Font("Consolas", 9); $global:txtLog.Anchor = "Top, Bottom, Left, Right"
 $grpLog.Controls.Add($global:txtLog)
 
 # -- Tag Stats Box --
@@ -944,13 +951,13 @@ $grpStats.Anchor = "Top, Right"
 $lblTitleTotal = New-Object System.Windows.Forms.Label; $lblTitleTotal.Location = New-Object System.Drawing.Point(15, 25); $lblTitleTotal.Size = New-Object System.Drawing.Size(140, 20); $lblTitleTotal.Text = "Total Rows:"; $lblTitleTotal.Font = New-Object System.Drawing.Font("Consolas", 10)
 $lblTitleDisp = New-Object System.Windows.Forms.Label; $lblTitleDisp.Location = New-Object System.Drawing.Point(15, 48); $lblTitleDisp.Size = New-Object System.Drawing.Size(140, 20); $lblTitleDisp.Text = "Displayed Rows:"; $lblTitleDisp.Font = New-Object System.Drawing.Font("Consolas", 10)
 $lblTitleSel = New-Object System.Windows.Forms.Label; $lblTitleSel.Location = New-Object System.Drawing.Point(15, 71); $lblTitleSel.Size = New-Object System.Drawing.Size(140, 20); $lblTitleSel.Text = "Selected Rows:"; $lblTitleSel.Font = New-Object System.Drawing.Font("Consolas", 10)
-$global:lblValTotal = New-Object System.Windows.Forms.Label; $global:lblValTotal.Location = New-Object System.Drawing.Point(160, 25); $global:lblValTotal.Size = New-Object System.Drawing.Size(100, 20); $global:lblValTotal.Text = "0"; $global:lblValTotal.Font = New-Object System.Drawing.Font("Consolas", 10)
-$global:lblValDisp = New-Object System.Windows.Forms.Label; $global:lblValDisp.Location = New-Object System.Drawing.Point(160, 48); $global:lblValDisp.Size = New-Object System.Drawing.Size(100, 20); $global:lblValDisp.Text = "0"; $global:lblValDisp.Font = New-Object System.Drawing.Font("Consolas", 10)
-$global:lblValSel = New-Object System.Windows.Forms.Label; $global:lblValSel.Location = New-Object System.Drawing.Point(160, 71); $global:lblValSel.Size = New-Object System.Drawing.Size(100, 20); $global:lblValSel.Text = "0"; $global:lblValSel.Font = New-Object System.Drawing.Font("Consolas", 10)
+$global:lblValTotal = New-Object System.Windows.Forms.Label; $global:lblValTotal.Location = New-Object System.Drawing.Point(160, 25); $global:lblValTotal.Size = New-Object System.Drawing.Size(100, 20); $global:lblValTotal.Text = "0"; $global:lblValTotal.Font = New-Object System.Drawing.Font("Consolas", 10, [System.Drawing.FontStyle]::Bold); $global:lblValTotal.ForeColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+$global:lblValDisp = New-Object System.Windows.Forms.Label; $global:lblValDisp.Location = New-Object System.Drawing.Point(160, 48); $global:lblValDisp.Size = New-Object System.Drawing.Size(100, 20); $global:lblValDisp.Text = "0"; $global:lblValDisp.Font = New-Object System.Drawing.Font("Consolas", 10, [System.Drawing.FontStyle]::Bold); $global:lblValDisp.ForeColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+$global:lblValSel = New-Object System.Windows.Forms.Label; $global:lblValSel.Location = New-Object System.Drawing.Point(160, 71); $global:lblValSel.Size = New-Object System.Drawing.Size(100, 20); $global:lblValSel.Text = "0"; $global:lblValSel.Font = New-Object System.Drawing.Font("Consolas", 10, [System.Drawing.FontStyle]::Bold); $global:lblValSel.ForeColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
 $grpStats.Controls.AddRange(@($lblTitleTotal, $lblTitleDisp, $lblTitleSel, $global:lblValTotal, $global:lblValDisp, $global:lblValSel))
 
 # -- Progress Bar --
-$progressBar = New-Object System.Windows.Forms.ProgressBar; $progressBar.Location = New-Object System.Drawing.Point(20, 780); $progressBar.Size = New-Object System.Drawing.Size(1240, 10); $progressBar.Style = "Continuous"; $progressBar.Anchor = "Bottom, Left, Right"
+$progressBar = New-Object System.Windows.Forms.ProgressBar; $progressBar.Location = New-Object System.Drawing.Point(20, 778); $progressBar.Size = New-Object System.Drawing.Size(1240, 14); $progressBar.Style = "Continuous"; $progressBar.Anchor = "Bottom, Left, Right"; $progressBar.BackColor = [System.Drawing.Color]::FromArgb(230,230,230)
 $global:form.Controls.Add($progressBar)
 
 # -- Top Controls (Wrapped in GroupBox) --
@@ -964,19 +971,19 @@ $grpTopActions.Anchor = "Top, Left, Right"
 $innerY = 20 # Y-Position for controls inside the GroupBox
 
 # 1. Connection Buttons (Left)
-$btnConnect = New-Object System.Windows.Forms.Button; $btnConnect.Location = New-Object System.Drawing.Point(10, $innerY); $btnConnect.Size = New-Object System.Drawing.Size(80, 30); $btnConnect.Text = "1. Connect"; $btnConnect.BackColor = "#0078D7"; $btnConnect.ForeColor = "White"
-$btnFetchData = New-Object System.Windows.Forms.Button; $btnFetchData.Location = New-Object System.Drawing.Point(95, $innerY); $btnFetchData.Size = New-Object System.Drawing.Size(120, 30); $btnFetchData.Text = "2. Get Data"; $btnFetchData.Enabled = $false
-$btnSyncOrange = New-Object System.Windows.Forms.Button; $btnSyncOrange.Location = New-Object System.Drawing.Point(220, $innerY); $btnSyncOrange.Size = New-Object System.Drawing.Size(100, 30); $btnSyncOrange.Text = "3. Re-Sync"; $btnSyncOrange.BackColor = "#FF8C00"; $btnSyncOrange.ForeColor = "White"; $btnSyncOrange.Enabled = $false 
+$btnConnect = New-Object System.Windows.Forms.Button; $btnConnect.Location = New-Object System.Drawing.Point(10, $innerY); $btnConnect.Size = New-Object System.Drawing.Size(80, 30); $btnConnect.Text = "1. Connect"; $btnConnect.BackColor = "#0078D7"; $btnConnect.ForeColor = "White"; $btnConnect.FlatStyle = "Flat"; $btnConnect.FlatAppearance.BorderSize = 0
+$btnFetchData = New-Object System.Windows.Forms.Button; $btnFetchData.Location = New-Object System.Drawing.Point(95, $innerY); $btnFetchData.Size = New-Object System.Drawing.Size(120, 30); $btnFetchData.Text = "2. Get Data"; $btnFetchData.Enabled = $false; $btnFetchData.FlatStyle = "Flat"; $btnFetchData.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(180,180,180)
+$btnSyncOrange = New-Object System.Windows.Forms.Button; $btnSyncOrange.Location = New-Object System.Drawing.Point(220, $innerY); $btnSyncOrange.Size = New-Object System.Drawing.Size(100, 30); $btnSyncOrange.Text = "3. Re-Sync"; $btnSyncOrange.BackColor = "#FF8C00"; $btnSyncOrange.ForeColor = "White"; $btnSyncOrange.Enabled = $false; $btnSyncOrange.FlatStyle = "Flat"; $btnSyncOrange.FlatAppearance.BorderSize = 0
 
 # Separator 1
-$sepTop1 = New-Object System.Windows.Forms.Label; $sepTop1.Location = New-Object System.Drawing.Point(325, $innerY); $sepTop1.Size = New-Object System.Drawing.Size(2, 30); $sepTop1.BorderStyle = "Fixed3D"
+$sepTop1 = New-Object System.Windows.Forms.Label; $sepTop1.Location = New-Object System.Drawing.Point(325, $innerY); $sepTop1.Size = New-Object System.Drawing.Size(1, 30); $sepTop1.BackColor = [System.Drawing.Color]::FromArgb(190,190,190)
 
 # 2. Export & Free Number
-$btnExport = New-Object System.Windows.Forms.Button; $btnExport.Location = New-Object System.Drawing.Point(335, $innerY); $btnExport.Size = New-Object System.Drawing.Size(90, 30); $btnExport.Text = "Export"; $btnExport.BackColor = "#28a745"; $btnExport.ForeColor = "White"; $btnExport.Add_Click({ Export-SelectedToCSV })
-$btnGetFree = New-Object System.Windows.Forms.Button; $btnGetFree.Location = New-Object System.Drawing.Point(430, $innerY); $btnGetFree.Size = New-Object System.Drawing.Size(90, 30); $btnGetFree.Text = "Get Free #"; $btnGetFree.BackColor = "#006400"; $btnGetFree.ForeColor = "White"
+$btnExport = New-Object System.Windows.Forms.Button; $btnExport.Location = New-Object System.Drawing.Point(335, $innerY); $btnExport.Size = New-Object System.Drawing.Size(90, 30); $btnExport.Text = "Export"; $btnExport.BackColor = "#28a745"; $btnExport.ForeColor = "White"; $btnExport.FlatStyle = "Flat"; $btnExport.FlatAppearance.BorderSize = 0; $btnExport.Add_Click({ Export-SelectedToCSV })
+$btnGetFree = New-Object System.Windows.Forms.Button; $btnGetFree.Location = New-Object System.Drawing.Point(430, $innerY); $btnGetFree.Size = New-Object System.Drawing.Size(90, 30); $btnGetFree.Text = "Get Free #"; $btnGetFree.BackColor = "#006400"; $btnGetFree.ForeColor = "White"; $btnGetFree.FlatStyle = "Flat"; $btnGetFree.FlatAppearance.BorderSize = 0
 
 # Separator 2
-$sepFilter = New-Object System.Windows.Forms.Label; $sepFilter.Location = New-Object System.Drawing.Point(525, $innerY); $sepFilter.Size = New-Object System.Drawing.Size(2, 30); $sepFilter.BorderStyle = "Fixed3D"
+$sepFilter = New-Object System.Windows.Forms.Label; $sepFilter.Location = New-Object System.Drawing.Point(525, $innerY); $sepFilter.Size = New-Object System.Drawing.Size(1, 30); $sepFilter.BackColor = [System.Drawing.Color]::FromArgb(190,190,190)
 
 # 3. Filter Area
 # UPDATED: Label changed from 'Text:' to 'Filter:'
@@ -999,7 +1006,7 @@ $global:cmbFilterTag.SelectedIndex = 0
 
 # UPDATED: Shifted X right by 30px (800 -> 830)
 $btnApplyFilter = New-Object System.Windows.Forms.Button; 
-$btnApplyFilter.Location = New-Object System.Drawing.Point(830, $innerY); $btnApplyFilter.Size = New-Object System.Drawing.Size(80, 30); $btnApplyFilter.Text = "Apply Filter"; $btnApplyFilter.BackColor = "#A9A9A9"; $btnApplyFilter.ForeColor = "White"
+$btnApplyFilter.Location = New-Object System.Drawing.Point(830, $innerY); $btnApplyFilter.Size = New-Object System.Drawing.Size(80, 30); $btnApplyFilter.Text = "Apply Filter"; $btnApplyFilter.BackColor = "#A9A9A9"; $btnApplyFilter.ForeColor = "White"; $btnApplyFilter.FlatStyle = "Flat"; $btnApplyFilter.FlatAppearance.BorderSize = 0
 
 # 4. Toggles & Columns (Shifted Right)
 $btnToggleUnassigned = New-Object System.Windows.Forms.Button
@@ -1008,11 +1015,12 @@ $btnToggleUnassigned.Location = New-Object System.Drawing.Point(930, $innerY)
 $btnToggleUnassigned.Size = New-Object System.Drawing.Size(120, 30)
 $btnToggleUnassigned.Text = "Hide Unassigned"
 $btnToggleUnassigned.BackColor = "#e0e0e0"
+$btnToggleUnassigned.FlatStyle = "Flat"; $btnToggleUnassigned.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(180,180,180)
 
 $btnSelectCols = New-Object System.Windows.Forms.Button
 # UPDATED: Shifted X right by 30px (1040 -> 1070)
 $btnSelectCols.Location = New-Object System.Drawing.Point(1070, $innerY)
-$btnSelectCols.Size = New-Object System.Drawing.Size(70, 30); $btnSelectCols.Text = "Columns"; $btnSelectCols.BackColor = "#808080"; $btnSelectCols.ForeColor = "White"
+$btnSelectCols.Size = New-Object System.Drawing.Size(70, 30); $btnSelectCols.Text = "Columns"; $btnSelectCols.BackColor = "#808080"; $btnSelectCols.ForeColor = "White"; $btnSelectCols.FlatStyle = "Flat"; $btnSelectCols.FlatAppearance.BorderSize = 0
 
 # Help Button
 $btnHelp = New-Object System.Windows.Forms.Button
@@ -1022,6 +1030,7 @@ $btnHelp.Size = New-Object System.Drawing.Size(60, 30)
 $btnHelp.Text = "Help"
 $btnHelp.BackColor = "#17a2b8"
 $btnHelp.ForeColor = "White"
+$btnHelp.FlatStyle = "Flat"; $btnHelp.FlatAppearance.BorderSize = 0
 
 # --- Re-Add Logic Blocks ---
 $actionApplyFilter = {
@@ -1116,6 +1125,16 @@ $btnHelp.Add_Click({
     $fHelp.ShowDialog()
 })
 
+# ToolTips for Data Operations
+$toolTip.SetToolTip($btnConnect, "Connect to Microsoft Teams PowerShell")
+$toolTip.SetToolTip($btnFetchData, "Fetch phone numbers from Teams and Orange API")
+$toolTip.SetToolTip($btnSyncOrange, "Re-sync Orange Business Cloud status only")
+$toolTip.SetToolTip($btnExport, "Export current grid view to CSV file")
+$toolTip.SetToolTip($btnGetFree, "Jump to next unassigned phone number")
+$toolTip.SetToolTip($btnToggleUnassigned, "Toggle visibility of unassigned numbers")
+$toolTip.SetToolTip($btnSelectCols, "Choose which columns to show or hide")
+$toolTip.SetToolTip($txtFilter, "Type to search across all columns (Enter to apply)")
+
 $grpTopActions.Controls.AddRange(@($btnConnect, $btnFetchData, $btnSyncOrange, $sepTop1, $btnExport, $btnGetFree, $sepFilter, $lblFilter, $txtFilter, $lblFilterTag, $global:cmbFilterTag, $btnApplyFilter, $btnToggleUnassigned, $btnSelectCols, $btnHelp))
 
 # -- Grid (Y Position shifted down to 160 to accommodate groupbox) --
@@ -1129,15 +1148,22 @@ $dataGridView.SelectionMode = "FullRowSelect"
 $dataGridView.MultiSelect = $true
 $dataGridView.ReadOnly = $true
 $dataGridView.AutoSizeColumnsMode = "AllCells"
-$dataGridView.DefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(224, 224, 224) 
+$dataGridView.DefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(204, 228, 247)
 $dataGridView.DefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::Black
+$dataGridView.AlternatingRowsDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(245, 248, 252)
+$dataGridView.GridColor = [System.Drawing.Color]::FromArgb(220, 225, 230)
+$dataGridView.BorderStyle = "None"
+$dataGridView.CellBorderStyle = "SingleHorizontal"
 
 $dataGridView.EnableHeadersVisualStyles = $false
-$dataGridView.ColumnHeadersDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
-$dataGridView.ColumnHeadersDefaultCellStyle.ForeColor = [System.Drawing.Color]::Black
-$dataGridView.ColumnHeadersDefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
-$dataGridView.ColumnHeadersDefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::Black
+$dataGridView.ColumnHeadersDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(235, 238, 242)
+$dataGridView.ColumnHeadersDefaultCellStyle.ForeColor = [System.Drawing.Color]::FromArgb(50, 50, 50)
+$dataGridView.ColumnHeadersDefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(235, 238, 242)
+$dataGridView.ColumnHeadersDefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::FromArgb(50, 50, 50)
 $dataGridView.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$dataGridView.ColumnHeadersHeight = 32
+$dataGridView.ColumnHeadersDefaultCellStyle.Padding = New-Object System.Windows.Forms.Padding(4, 4, 4, 4)
+$dataGridView.RowTemplate.Height = 24
 
 $dataGridView.Add_SelectionChanged({ $btnAssign.Enabled = ($dataGridView.SelectedRows.Count -eq 1); Update-Stats })
 
@@ -1155,46 +1181,62 @@ $dataGridView.ContextMenuStrip = $ctxMenu
 
 # -- Actions --
 # UPDATED LAYOUT FOR VISUAL SEPARATION
-$grpTag = New-Object System.Windows.Forms.GroupBox; $grpTag.Location = New-Object System.Drawing.Point(20, 800); $grpTag.Size = New-Object System.Drawing.Size(1550, 50); $grpTag.Text = "Actions"; $grpTag.Anchor = "Bottom, Left, Right"
+$grpTag = New-Object System.Windows.Forms.GroupBox; $grpTag.Location = New-Object System.Drawing.Point(20, 795); $grpTag.Size = New-Object System.Drawing.Size(1550, 62); $grpTag.Text = "Actions"; $grpTag.Anchor = "Bottom, Left, Right"
+
+# Sub-group labels (small, muted color)
+$lblGrpTags = New-Object System.Windows.Forms.Label; $lblGrpTags.Location = New-Object System.Drawing.Point(10, 14); $lblGrpTags.Size = New-Object System.Drawing.Size(120, 13); $lblGrpTags.Text = "TAGGING"; $lblGrpTags.Font = New-Object System.Drawing.Font("Segoe UI", 7, [System.Drawing.FontStyle]::Bold); $lblGrpTags.ForeColor = [System.Drawing.Color]::FromArgb(120,120,120)
+$lblGrpTeams = New-Object System.Windows.Forms.Label; $lblGrpTeams.Location = New-Object System.Drawing.Point(665, 14); $lblGrpTeams.Size = New-Object System.Drawing.Size(120, 13); $lblGrpTeams.Text = "TEAMS"; $lblGrpTeams.Font = New-Object System.Drawing.Font("Segoe UI", 7, [System.Drawing.FontStyle]::Bold); $lblGrpTeams.ForeColor = [System.Drawing.Color]::FromArgb(120,120,120)
+$lblGrpRemove = New-Object System.Windows.Forms.Label; $lblGrpRemove.Location = New-Object System.Drawing.Point(875, 14); $lblGrpRemove.Size = New-Object System.Drawing.Size(80, 13); $lblGrpRemove.Text = "NUMBER"; $lblGrpRemove.Font = New-Object System.Drawing.Font("Segoe UI", 7, [System.Drawing.FontStyle]::Bold); $lblGrpRemove.ForeColor = [System.Drawing.Color]::FromArgb(120,120,120)
+$lblGrpOrange = New-Object System.Windows.Forms.Label; $lblGrpOrange.Location = New-Object System.Drawing.Point(995, 14); $lblGrpOrange.Size = New-Object System.Drawing.Size(120, 13); $lblGrpOrange.Text = "ORANGE CLOUD"; $lblGrpOrange.Font = New-Object System.Drawing.Font("Segoe UI", 7, [System.Drawing.FontStyle]::Bold); $lblGrpOrange.ForeColor = [System.Drawing.Color]::FromArgb(120,120,120)
 
 # Group 1: Tags
-$lblTagInput = New-Object System.Windows.Forms.Label; $lblTagInput.Location = New-Object System.Drawing.Point(10, 22); $lblTagInput.Size = New-Object System.Drawing.Size(70, 20); $lblTagInput.Text = "Select Tag:"
-$global:cmbTag = New-Object System.Windows.Forms.ComboBox; $global:cmbTag.Location = New-Object System.Drawing.Point(80, 19); $global:cmbTag.Size = New-Object System.Drawing.Size(120, 20); $global:cmbTag.DropDownStyle = "DropDownList"
+$lblTagInput = New-Object System.Windows.Forms.Label; $lblTagInput.Location = New-Object System.Drawing.Point(10, 32); $lblTagInput.Size = New-Object System.Drawing.Size(70, 20); $lblTagInput.Text = "Select Tag:"
+$global:cmbTag = New-Object System.Windows.Forms.ComboBox; $global:cmbTag.Location = New-Object System.Drawing.Point(80, 29); $global:cmbTag.Size = New-Object System.Drawing.Size(120, 20); $global:cmbTag.DropDownStyle = "DropDownList"
 Update-TagUI # Initial Populate
 
-$cbBlacklist = New-Object System.Windows.Forms.CheckBox; $cbBlacklist.Location = New-Object System.Drawing.Point(210, 19); $cbBlacklist.Size = New-Object System.Drawing.Size(70, 20); $cbBlacklist.Text = "Blacklist"
-$cbReserved = New-Object System.Windows.Forms.CheckBox; $cbReserved.Location = New-Object System.Drawing.Point(290, 19); $cbReserved.Size = New-Object System.Drawing.Size(80, 20); $cbReserved.Text = "Reserved"
-$cbPremium = New-Object System.Windows.Forms.CheckBox; $cbPremium.Location = New-Object System.Drawing.Point(380, 19); $cbPremium.Size = New-Object System.Drawing.Size(80, 20); $cbPremium.Text = "Premium"
-$btnApplyTag = New-Object System.Windows.Forms.Button; $btnApplyTag.Location = New-Object System.Drawing.Point(470, 17); $btnApplyTag.Size = New-Object System.Drawing.Size(80, 25); $btnApplyTag.Text = "Apply Tag"
+$cbBlacklist = New-Object System.Windows.Forms.CheckBox; $cbBlacklist.Location = New-Object System.Drawing.Point(210, 29); $cbBlacklist.Size = New-Object System.Drawing.Size(70, 20); $cbBlacklist.Text = "Blacklist"
+$cbReserved = New-Object System.Windows.Forms.CheckBox; $cbReserved.Location = New-Object System.Drawing.Point(290, 29); $cbReserved.Size = New-Object System.Drawing.Size(80, 20); $cbReserved.Text = "Reserved"
+$cbPremium = New-Object System.Windows.Forms.CheckBox; $cbPremium.Location = New-Object System.Drawing.Point(380, 29); $cbPremium.Size = New-Object System.Drawing.Size(80, 20); $cbPremium.Text = "Premium"
+$btnApplyTag = New-Object System.Windows.Forms.Button; $btnApplyTag.Location = New-Object System.Drawing.Point(470, 27); $btnApplyTag.Size = New-Object System.Drawing.Size(80, 25); $btnApplyTag.Text = "Apply Tag"; $btnApplyTag.FlatStyle = "Flat"; $btnApplyTag.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(180,180,180)
 
 # NEW BUTTON: Remove Tags
-$btnRemoveTags = New-Object System.Windows.Forms.Button; $btnRemoveTags.Location = New-Object System.Drawing.Point(555, 17); $btnRemoveTags.Size = New-Object System.Drawing.Size(90, 25); $btnRemoveTags.Text = "Remove Tags"; $btnRemoveTags.BackColor = "#CD5C5C"; $btnRemoveTags.ForeColor = "White"
+$btnRemoveTags = New-Object System.Windows.Forms.Button; $btnRemoveTags.Location = New-Object System.Drawing.Point(555, 27); $btnRemoveTags.Size = New-Object System.Drawing.Size(90, 25); $btnRemoveTags.Text = "Remove Tags"; $btnRemoveTags.BackColor = "#CD5C5C"; $btnRemoveTags.ForeColor = "White"; $btnRemoveTags.FlatStyle = "Flat"; $btnRemoveTags.FlatAppearance.BorderSize = 0
 
 
-# SEPARATOR 1: Tags | Teams Actions (Shifted Right)
-$sepAction1 = New-Object System.Windows.Forms.Label; $sepAction1.Location = New-Object System.Drawing.Point(650, 15); $sepAction1.Size = New-Object System.Drawing.Size(2, 30); $sepAction1.BorderStyle = "Fixed3D"
+# SEPARATOR 1: Tags | Teams Actions
+$sepAction1 = New-Object System.Windows.Forms.Label; $sepAction1.Location = New-Object System.Drawing.Point(650, 14); $sepAction1.Size = New-Object System.Drawing.Size(1, 42); $sepAction1.BackColor = [System.Drawing.Color]::FromArgb(190,190,190)
 
-# Group 2: Teams Actions (Shifted Right)
-$btnAssign = New-Object System.Windows.Forms.Button; $btnAssign.Location = New-Object System.Drawing.Point(665, 17); $btnAssign.Size = New-Object System.Drawing.Size(80, 25); $btnAssign.Text = "Assign"; $btnAssign.BackColor = "#5cb85c"; $btnAssign.ForeColor = "White"; $btnAssign.Enabled = $false
-$btnUnassign = New-Object System.Windows.Forms.Button; $btnUnassign.Location = New-Object System.Drawing.Point(755, 17); $btnUnassign.Size = New-Object System.Drawing.Size(90, 25); $btnUnassign.Text = "Unassign"; $btnUnassign.BackColor = "#F0AD4E"; $btnUnassign.ForeColor = "White"
+# Group 2: Teams Actions
+$btnAssign = New-Object System.Windows.Forms.Button; $btnAssign.Location = New-Object System.Drawing.Point(665, 27); $btnAssign.Size = New-Object System.Drawing.Size(80, 25); $btnAssign.Text = "Assign"; $btnAssign.BackColor = "#5cb85c"; $btnAssign.ForeColor = "White"; $btnAssign.Enabled = $false; $btnAssign.FlatStyle = "Flat"; $btnAssign.FlatAppearance.BorderSize = 0
+$btnUnassign = New-Object System.Windows.Forms.Button; $btnUnassign.Location = New-Object System.Drawing.Point(755, 27); $btnUnassign.Size = New-Object System.Drawing.Size(90, 25); $btnUnassign.Text = "Unassign"; $btnUnassign.BackColor = "#F0AD4E"; $btnUnassign.ForeColor = "White"; $btnUnassign.FlatStyle = "Flat"; $btnUnassign.FlatAppearance.BorderSize = 0
 
-# SEPARATOR 2: Teams Actions | Number Actions (Shifted Right)
-$sepAction2 = New-Object System.Windows.Forms.Label; $sepAction2.Location = New-Object System.Drawing.Point(860, 15); $sepAction2.Size = New-Object System.Drawing.Size(2, 30); $sepAction2.BorderStyle = "Fixed3D"
+# SEPARATOR 2: Teams Actions | Number Actions
+$sepAction2 = New-Object System.Windows.Forms.Label; $sepAction2.Location = New-Object System.Drawing.Point(860, 14); $sepAction2.Size = New-Object System.Drawing.Size(1, 42); $sepAction2.BackColor = [System.Drawing.Color]::FromArgb(190,190,190)
 
-# Group 3: Number Actions (Remove) (Shifted Right)
-$btnRemove = New-Object System.Windows.Forms.Button; $btnRemove.Location = New-Object System.Drawing.Point(875, 17); $btnRemove.Size = New-Object System.Drawing.Size(90, 25); $btnRemove.Text = "Remove"; $btnRemove.BackColor = "#D9534F"; $btnRemove.ForeColor = "White"
+# Group 3: Number Actions (Remove)
+$btnRemove = New-Object System.Windows.Forms.Button; $btnRemove.Location = New-Object System.Drawing.Point(875, 27); $btnRemove.Size = New-Object System.Drawing.Size(90, 25); $btnRemove.Text = "Remove"; $btnRemove.BackColor = "#D9534F"; $btnRemove.ForeColor = "White"; $btnRemove.FlatStyle = "Flat"; $btnRemove.FlatAppearance.BorderSize = 0
 
-# SEPARATOR 3: Number Actions | Orange Actions (Shifted Right)
-$sepAction3 = New-Object System.Windows.Forms.Label; $sepAction3.Location = New-Object System.Drawing.Point(980, 15); $sepAction3.Size = New-Object System.Drawing.Size(2, 30); $sepAction3.BorderStyle = "Fixed3D"
+# SEPARATOR 3: Number Actions | Orange Actions
+$sepAction3 = New-Object System.Windows.Forms.Label; $sepAction3.Location = New-Object System.Drawing.Point(980, 14); $sepAction3.Size = New-Object System.Drawing.Size(1, 42); $sepAction3.BackColor = [System.Drawing.Color]::FromArgb(190,190,190)
 
-# Group 4: Orange Actions (Shifted Right)
-$btnReleaseOC = New-Object System.Windows.Forms.Button; $btnReleaseOC.Location = New-Object System.Drawing.Point(995, 17); $btnReleaseOC.Size = New-Object System.Drawing.Size(110, 25); $btnReleaseOC.Text = "Release from OC"; $btnReleaseOC.BackColor = "#C71585"; $btnReleaseOC.ForeColor = "White"
-$btnPublishOC = New-Object System.Windows.Forms.Button; $btnPublishOC.Location = New-Object System.Drawing.Point(1115, 17); $btnPublishOC.Size = New-Object System.Drawing.Size(110, 25); $btnPublishOC.Text = "Publish to OC"; $btnPublishOC.BackColor = "#008B8B"; $btnPublishOC.ForeColor = "White"
+# Group 4: Orange Actions
+$btnReleaseOC = New-Object System.Windows.Forms.Button; $btnReleaseOC.Location = New-Object System.Drawing.Point(995, 27); $btnReleaseOC.Size = New-Object System.Drawing.Size(110, 25); $btnReleaseOC.Text = "Release from OC"; $btnReleaseOC.BackColor = "#C71585"; $btnReleaseOC.ForeColor = "White"; $btnReleaseOC.FlatStyle = "Flat"; $btnReleaseOC.FlatAppearance.BorderSize = 0
+$btnPublishOC = New-Object System.Windows.Forms.Button; $btnPublishOC.Location = New-Object System.Drawing.Point(1115, 27); $btnPublishOC.Size = New-Object System.Drawing.Size(110, 25); $btnPublishOC.Text = "Publish to OC"; $btnPublishOC.BackColor = "#008B8B"; $btnPublishOC.ForeColor = "White"; $btnPublishOC.FlatStyle = "Flat"; $btnPublishOC.FlatAppearance.BorderSize = 0
 
-# NEW BUTTON: Manual Publish (Shifted Right)
-$btnManualPublish = New-Object System.Windows.Forms.Button; $btnManualPublish.Location = New-Object System.Drawing.Point(1235, 17); $btnManualPublish.Size = New-Object System.Drawing.Size(110, 25); $btnManualPublish.Text = "Manual Publish"; $btnManualPublish.BackColor = "#4682B4"; $btnManualPublish.ForeColor = "White"
+# NEW BUTTON: Manual Publish
+$btnManualPublish = New-Object System.Windows.Forms.Button; $btnManualPublish.Location = New-Object System.Drawing.Point(1235, 27); $btnManualPublish.Size = New-Object System.Drawing.Size(110, 25); $btnManualPublish.Text = "Manual Publish"; $btnManualPublish.BackColor = "#4682B4"; $btnManualPublish.ForeColor = "White"; $btnManualPublish.FlatStyle = "Flat"; $btnManualPublish.FlatAppearance.BorderSize = 0
 
-$grpTag.Controls.AddRange(@($lblTagInput, $global:cmbTag, $cbBlacklist, $cbReserved, $cbPremium, $btnApplyTag, $btnRemoveTags, $sepAction1, $btnAssign, $btnUnassign, $sepAction2, $btnRemove, $sepAction3, $btnReleaseOC, $btnPublishOC, $btnManualPublish))
+# ToolTips for Actions
+$toolTip.SetToolTip($btnApplyTag, "Apply selected tag and flags to selected rows")
+$toolTip.SetToolTip($btnRemoveTags, "Clear all tags from selected rows")
+$toolTip.SetToolTip($btnAssign, "Assign phone number to a Teams user (single row)")
+$toolTip.SetToolTip($btnUnassign, "Unassign phone numbers from Teams users")
+$toolTip.SetToolTip($btnRemove, "Remove phone numbers from Teams entirely")
+$toolTip.SetToolTip($btnReleaseOC, "Release numbers from Orange Business Cloud")
+$toolTip.SetToolTip($btnPublishOC, "Publish numbers to Orange Business Cloud")
+$toolTip.SetToolTip($btnManualPublish, "Manually publish a number with custom parameters")
+
+$grpTag.Controls.AddRange(@($lblGrpTags, $lblGrpTeams, $lblGrpRemove, $lblGrpOrange, $lblTagInput, $global:cmbTag, $cbBlacklist, $cbReserved, $cbPremium, $btnApplyTag, $btnRemoveTags, $sepAction1, $btnAssign, $btnUnassign, $sepAction2, $btnRemove, $sepAction3, $btnReleaseOC, $btnPublishOC, $btnManualPublish))
 #endregion
 
 # =============================================================================
