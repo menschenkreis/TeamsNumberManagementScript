@@ -5,9 +5,14 @@
 #region 1. Cleanup & Assemblies
 # --- CLEANUP SECTION ---
 if ($global:form -and !$global:form.IsDisposed) {
-    $global:form.Close()
-    $global:form.Dispose()
+    try {
+        $global:form.Close()
+        $global:form.Dispose()
+    } catch {
+        Write-Host "Warning: Could not cleanly dispose previous form - $($_.Exception.Message)"
+    }
 }
+$global:form = $null
 
 # Load Assemblies
 try { Add-Type -AssemblyName System.Windows.Forms } catch { Write-Host "Warning: Failed to load System.Windows.Forms - $($_.Exception.Message)" }
@@ -185,13 +190,36 @@ function Update-Stats {
 
 function Get-SimpleInput {
     param([string]$Title = "Input", [string]$Prompt = "Please enter value:")
-    $f = New-Object System.Windows.Forms.Form; $f.Width = 400; $f.Height = 180; $f.Text = $Title; $f.StartPosition = "CenterParent"; $f.FormBorderStyle = "FixedDialog"; $f.MaximizeBox = $false; $f.MinimizeBox = $false
-    $lbl = New-Object System.Windows.Forms.Label; $lbl.Location = New-Object System.Drawing.Point(20, 20); $lbl.Size = New-Object System.Drawing.Size(340, 20); $lbl.Text = $Prompt; $f.Controls.Add($lbl)
-    $txt = New-Object System.Windows.Forms.TextBox; $txt.Location = New-Object System.Drawing.Point(20, 50); $txt.Size = New-Object System.Drawing.Size(340, 20); $f.Controls.Add($txt)
-    $btnOk = New-Object System.Windows.Forms.Button; $btnOk.Text = "OK"; $btnOk.DialogResult = "OK"; $btnOk.Location = New-Object System.Drawing.Point(200, 90); $f.Controls.Add($btnOk)
-    $btnCancel = New-Object System.Windows.Forms.Button; $btnCancel.Text = "Cancel"; $btnCancel.DialogResult = "Cancel"; $btnCancel.Location = New-Object System.Drawing.Point(280, 90); $f.Controls.Add($btnCancel)
+
+    $f = New-Object System.Windows.Forms.Form
+    $f.Width = 400; $f.Height = 180; $f.Text = $Title
+    $f.StartPosition = "CenterParent"; $f.FormBorderStyle = "FixedDialog"
+    $f.MaximizeBox = $false; $f.MinimizeBox = $false
+
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Location = New-Object System.Drawing.Point(20, 20)
+    $lbl.Size = New-Object System.Drawing.Size(340, 20)
+    $lbl.Text = $Prompt
+    $f.Controls.Add($lbl)
+
+    $txt = New-Object System.Windows.Forms.TextBox
+    $txt.Location = New-Object System.Drawing.Point(20, 50)
+    $txt.Size = New-Object System.Drawing.Size(340, 20)
+    $f.Controls.Add($txt)
+
+    $btnOk = New-Object System.Windows.Forms.Button
+    $btnOk.Text = "OK"; $btnOk.DialogResult = "OK"
+    $btnOk.Location = New-Object System.Drawing.Point(200, 90)
+    $f.Controls.Add($btnOk)
+
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = "Cancel"; $btnCancel.DialogResult = "Cancel"
+    $btnCancel.Location = New-Object System.Drawing.Point(280, 90)
+    $f.Controls.Add($btnCancel)
+
     $f.AcceptButton = $btnOk; $f.CancelButton = $btnCancel
-    if ($f.ShowDialog() -eq "OK") { return $txt.Text } return $null
+    if ($f.ShowDialog() -eq "OK") { return $txt.Text }
+    return $null
 }
 
 function Get-SelectionInput {
@@ -294,16 +322,35 @@ function Get-ManualPublishInput {
 function Export-SelectedToCSV {
     $sel = $dataGridView.SelectedRows
     if ($sel.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Please select rows to export.", "Info"); return }
-    $sfd = New-Object System.Windows.Forms.SaveFileDialog; $sfd.Filter = "CSV Files (*.csv)|*.csv"; $sfd.Title = "Save Export As"; $sfd.FileName = "TeamsPhoneExport_$(Get-Date -Format 'yyyyMMdd_HHmm').csv"
+    $sfd = New-Object System.Windows.Forms.SaveFileDialog
+    $sfd.Filter = "CSV Files (*.csv)|*.csv"
+    $sfd.Title = "Save Export As"
+    $sfd.FileName = "TeamsPhoneExport_$(Get-Date -Format 'yyyyMMdd_HHmm').csv"
+
     if ($sfd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $path = $sfd.FileName; Write-Log "Exporting $($sel.Count) rows to CSV..."; $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $path = $sfd.FileName
+        Write-Log "Exporting $($sel.Count) rows to CSV..."
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         try {
-            $exportList = New-Object System.Collections.ArrayList
+            $exportList = [System.Collections.Generic.List[PSCustomObject]]::new()
             foreach ($row in $sel) {
-                $obj = [Ordered]@{}; foreach ($colName in $global:tableColumns) { $val = $row.Cells[$colName].Value; if ($null -eq $val) { $val = "" }; $obj[$colName] = [string]$val }; [void]$exportList.Add([PSCustomObject]$obj)
+                $obj = [Ordered]@{}
+                foreach ($colName in $global:tableColumns) {
+                    $val = $row.Cells[$colName].Value
+                    if ($null -eq $val) { $val = "" }
+                    $obj[$colName] = [string]$val
+                }
+                $exportList.Add([PSCustomObject]$obj)
             }
-            $exportList | Export-Csv -Path $path -NoTypeInformation -Delimiter "," -Encoding UTF8; Write-Log "Export saved to: $path"; [System.Windows.Forms.MessageBox]::Show("Export successful!", "Done")
-        } catch { Write-Log "Export Error: $($_.Exception.Message)"; [System.Windows.Forms.MessageBox]::Show("Export Failed: $($_.Exception.Message)", "Error") } finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
+            $exportList | Export-Csv -Path $path -NoTypeInformation -Delimiter "," -Encoding UTF8
+            Write-Log "Export saved to: $path"
+            [System.Windows.Forms.MessageBox]::Show("Export successful!", "Done")
+        } catch {
+            Write-Log "Export Error: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show("Export Failed: $($_.Exception.Message)", "Error")
+        } finally {
+            $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
+        }
     }
 }
 #endregion
@@ -979,19 +1026,55 @@ $btnHelp.ForeColor = "White"
 # --- Re-Add Logic Blocks ---
 $actionApplyFilter = {
     if ($dataGridView.DataSource -is [System.Data.DataTable]) {
-        $view = $dataGridView.DataSource.DefaultView; $filterParts = New-Object System.Collections.ArrayList
-        $rawVal = $txtFilter.Text.Trim(); 
+        $view = $dataGridView.DataSource.DefaultView
+        $filterParts = New-Object System.Collections.ArrayList
+        $rawVal = $txtFilter.Text.Trim()
+
         if (-not [string]::IsNullOrWhiteSpace($rawVal)) {
-            $safeVal = $rawVal.Replace("'", "''").Replace("[", "[[]").Replace("*", "[*]").Replace("%", "[%]"); $cols = $dataGridView.DataSource.Columns; $textFilterParts = New-Object System.Collections.ArrayList
-            foreach ($col in $cols) { [void]$textFilterParts.Add("[$($col.ColumnName)] LIKE '%$safeVal%'") }; [void]$filterParts.Add("(" + ($textFilterParts -join " OR ") + ")")
+            $safeVal = $rawVal.Replace("'", "''").Replace("[", "[[]").Replace("*", "[*]").Replace("%", "[%]")
+            $cols = $dataGridView.DataSource.Columns
+            $textFilterParts = New-Object System.Collections.ArrayList
+            foreach ($col in $cols) {
+                [void]$textFilterParts.Add("[$($col.ColumnName)] LIKE '%$safeVal%'")
+            }
+            [void]$filterParts.Add("(" + ($textFilterParts -join " OR ") + ")")
         }
-        if ($global:hideUnassigned) { [void]$filterParts.Add("(UserPrincipalName IS NOT NULL AND UserPrincipalName <> '')") }
-        $selectedTag = $global:cmbFilterTag.SelectedItem; if ($selectedTag -and $selectedTag -ne "All") { [void]$filterParts.Add("([Tag] LIKE '%$selectedTag%')") }
-        if ($filterParts.Count -gt 0) { try { $view.RowFilter = $filterParts -join " AND " } catch {} } else { $view.RowFilter = "" }; Update-Stats
+
+        if ($global:hideUnassigned) {
+            [void]$filterParts.Add("(UserPrincipalName IS NOT NULL AND UserPrincipalName <> '')")
+        }
+
+        $selectedTag = $global:cmbFilterTag.SelectedItem
+        if ($selectedTag -and $selectedTag -ne "All") {
+            [void]$filterParts.Add("([Tag] LIKE '%$selectedTag%')")
+        }
+
+        if ($filterParts.Count -gt 0) {
+            try { $view.RowFilter = $filterParts -join " AND " } catch {}
+        } else {
+            $view.RowFilter = ""
+        }
+        Update-Stats
     }
 }
-$btnApplyFilter.Add_Click($actionApplyFilter); $txtFilter.Add_KeyDown({ param($s, $e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { & $actionApplyFilter; $e.SuppressKeyPress = $true } }); $global:cmbFilterTag.Add_SelectionChangeCommitted($actionApplyFilter) 
-$btnToggleUnassigned.Add_Click({ $global:hideUnassigned = -not $global:hideUnassigned; if ($global:hideUnassigned) { $btnToggleUnassigned.Text = "Show All"; $btnToggleUnassigned.BackColor = "#b3d9ff" } else { $btnToggleUnassigned.Text = "Hide Unassigned"; $btnToggleUnassigned.BackColor = "#e0e0e0" }; & $actionApplyFilter })
+
+$btnApplyFilter.Add_Click($actionApplyFilter)
+$txtFilter.Add_KeyDown({ param($s, $e)
+    if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { & $actionApplyFilter; $e.SuppressKeyPress = $true }
+})
+$global:cmbFilterTag.Add_SelectionChangeCommitted($actionApplyFilter)
+
+$btnToggleUnassigned.Add_Click({
+    $global:hideUnassigned = -not $global:hideUnassigned
+    if ($global:hideUnassigned) {
+        $btnToggleUnassigned.Text = "Show All"
+        $btnToggleUnassigned.BackColor = "#b3d9ff"
+    } else {
+        $btnToggleUnassigned.Text = "Hide Unassigned"
+        $btnToggleUnassigned.BackColor = "#e0e0e0"
+    }
+    & $actionApplyFilter
+})
 
 $btnGetFree.Add_Click({
     if ($dataGridView.Rows.Count -eq 0) { return }
@@ -1002,17 +1085,50 @@ $btnGetFree.Add_Click({
 })
 
 $btnHelp.Add_Click({
-    $fHelp = New-Object System.Windows.Forms.Form; $fHelp.Text = "Help"; $fHelp.Size = New-Object System.Drawing.Size(800, 600); $fHelp.StartPosition = "CenterParent"
-    $txtHelp = New-Object System.Windows.Forms.TextBox; $txtHelp.Multiline = $true; $txtHelp.ReadOnly = $true; $txtHelp.Location = New-Object System.Drawing.Point(10, 10); $txtHelp.Size = New-Object System.Drawing.Size(760, 490); $txtHelp.ScrollBars = "Vertical"; $txtHelp.BackColor = "White"; $txtHelp.Font = New-Object System.Drawing.Font("Consolas", 10) 
-    $basePath = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }; $helpPath = Join-Path $basePath "help.txt"; if (Test-Path $helpPath) { try { $txtHelp.Text = Get-Content $helpPath -Raw -Encoding UTF8 } catch { $txtHelp.Text = "Error: $($_.Exception.Message)" } } else { $txtHelp.Text = "help.txt not found." }
-    $btnClose = New-Object System.Windows.Forms.Button; $btnClose.Text = "Close"; $btnClose.Location = New-Object System.Drawing.Point(350, 520); $btnClose.DialogResult = "OK"; $fHelp.Controls.AddRange(@($txtHelp, $btnClose)); $fHelp.Add_Shown({ $txtHelp.Select(0, 0); $btnClose.Focus() }); $fHelp.ShowDialog()
+    $fHelp = New-Object System.Windows.Forms.Form
+    $fHelp.Text = "Help"
+    $fHelp.Size = New-Object System.Drawing.Size(800, 600)
+    $fHelp.StartPosition = "CenterParent"
+
+    $txtHelp = New-Object System.Windows.Forms.TextBox
+    $txtHelp.Multiline = $true; $txtHelp.ReadOnly = $true
+    $txtHelp.Location = New-Object System.Drawing.Point(10, 10)
+    $txtHelp.Size = New-Object System.Drawing.Size(760, 490)
+    $txtHelp.ScrollBars = "Vertical"; $txtHelp.BackColor = "White"
+    $txtHelp.Font = New-Object System.Drawing.Font("Consolas", 10)
+
+    $basePath = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
+    $helpPath = Join-Path $basePath "help.txt"
+    if (Test-Path $helpPath) {
+        try { $txtHelp.Text = Get-Content $helpPath -Raw -Encoding UTF8 }
+        catch { $txtHelp.Text = "Error: $($_.Exception.Message)" }
+    } else {
+        $txtHelp.Text = "help.txt not found."
+    }
+
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = "Close"
+    $btnClose.Location = New-Object System.Drawing.Point(350, 520)
+    $btnClose.DialogResult = "OK"
+
+    $fHelp.Controls.AddRange(@($txtHelp, $btnClose))
+    $fHelp.Add_Shown({ $txtHelp.Select(0, 0); $btnClose.Focus() })
+    $fHelp.ShowDialog()
 })
 
 $grpTopActions.Controls.AddRange(@($btnConnect, $btnFetchData, $btnSyncOrange, $sepTop1, $btnExport, $btnGetFree, $sepFilter, $lblFilter, $txtFilter, $lblFilterTag, $global:cmbFilterTag, $btnApplyFilter, $btnToggleUnassigned, $btnSelectCols, $btnHelp))
 
 # -- Grid (Y Position shifted down to 160 to accommodate groupbox) --
 $gridY = 160
-$dataGridView = New-Object System.Windows.Forms.DataGridView; $dataGridView.Location = New-Object System.Drawing.Point(20, $gridY); $dataGridView.Size = New-Object System.Drawing.Size(1240, 610); $dataGridView.Anchor = "Top, Bottom, Left, Right"; $dataGridView.AllowUserToAddRows = $false; $dataGridView.SelectionMode = "FullRowSelect"; $dataGridView.MultiSelect = $true; $dataGridView.ReadOnly = $true; $dataGridView.AutoSizeColumnsMode = "AllCells"
+$dataGridView = New-Object System.Windows.Forms.DataGridView
+$dataGridView.Location = New-Object System.Drawing.Point(20, $gridY)
+$dataGridView.Size = New-Object System.Drawing.Size(1240, 610)
+$dataGridView.Anchor = "Top, Bottom, Left, Right"
+$dataGridView.AllowUserToAddRows = $false
+$dataGridView.SelectionMode = "FullRowSelect"
+$dataGridView.MultiSelect = $true
+$dataGridView.ReadOnly = $true
+$dataGridView.AutoSizeColumnsMode = "AllCells"
 $dataGridView.DefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(224, 224, 224) 
 $dataGridView.DefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::Black
 
@@ -1087,12 +1203,47 @@ $grpTag.Controls.AddRange(@($lblTagInput, $global:cmbTag, $cbBlacklist, $cbReser
 
 #region 9. Logic - General UI
 $btnSelectCols.Add_Click({
-    if ($dataGridView.DataSource -eq $null) { [System.Windows.Forms.MessageBox]::Show("Please load data first.", "Info"); return }
-    $frmCols = New-Object System.Windows.Forms.Form; $frmCols.Text = "Select Columns"; $frmCols.Size = New-Object System.Drawing.Size(300, 500); $frmCols.StartPosition = "CenterParent"; $frmCols.FormBorderStyle = "FixedDialog"
-    $clb = New-Object System.Windows.Forms.CheckedListBox; $clb.Location = New-Object System.Drawing.Point(10, 10); $clb.Size = New-Object System.Drawing.Size(260, 400); $clb.CheckOnClick = $true
-    foreach ($col in $dataGridView.Columns) { $state = if ($col.Visible) { [System.Windows.Forms.CheckState]::Checked } else { [System.Windows.Forms.CheckState]::Unchecked }; [void]$clb.Items.Add($col.Name, $state) }
-    $btnOkCols = New-Object System.Windows.Forms.Button; $btnOkCols.Text = "OK"; $btnOkCols.DialogResult = "OK"; $btnOkCols.Location = New-Object System.Drawing.Point(100, 420); $frmCols.Controls.Add($clb); $frmCols.Controls.Add($btnOkCols); $frmCols.AcceptButton = $btnOkCols
-    if ($frmCols.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor; $dataGridView.SuspendLayout(); for ($i = 0; $i -lt $clb.Items.Count; $i++) { $colName = $clb.Items[$i]; $isVisible = $clb.GetItemChecked($i); if ($colName -eq "TelephoneNumber") { $isVisible = $true }; $dataGridView.Columns[$colName].Visible = $isVisible }; $dataGridView.ResumeLayout(); $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }; $frmCols.Dispose()
+    if ($dataGridView.DataSource -eq $null) {
+        [System.Windows.Forms.MessageBox]::Show("Please load data first.", "Info"); return
+    }
+
+    $frmCols = New-Object System.Windows.Forms.Form
+    $frmCols.Text = "Select Columns"
+    $frmCols.Size = New-Object System.Drawing.Size(300, 500)
+    $frmCols.StartPosition = "CenterParent"
+    $frmCols.FormBorderStyle = "FixedDialog"
+
+    $clb = New-Object System.Windows.Forms.CheckedListBox
+    $clb.Location = New-Object System.Drawing.Point(10, 10)
+    $clb.Size = New-Object System.Drawing.Size(260, 400)
+    $clb.CheckOnClick = $true
+
+    foreach ($col in $dataGridView.Columns) {
+        $state = if ($col.Visible) { [System.Windows.Forms.CheckState]::Checked } else { [System.Windows.Forms.CheckState]::Unchecked }
+        [void]$clb.Items.Add($col.Name, $state)
+    }
+
+    $btnOkCols = New-Object System.Windows.Forms.Button
+    $btnOkCols.Text = "OK"
+    $btnOkCols.DialogResult = "OK"
+    $btnOkCols.Location = New-Object System.Drawing.Point(100, 420)
+    $frmCols.Controls.Add($clb)
+    $frmCols.Controls.Add($btnOkCols)
+    $frmCols.AcceptButton = $btnOkCols
+
+    if ($frmCols.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $dataGridView.SuspendLayout()
+        for ($i = 0; $i -lt $clb.Items.Count; $i++) {
+            $colName = $clb.Items[$i]
+            $isVisible = $clb.GetItemChecked($i)
+            if ($colName -eq "TelephoneNumber") { $isVisible = $true }
+            $dataGridView.Columns[$colName].Visible = $isVisible
+        }
+        $dataGridView.ResumeLayout()
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
+    $frmCols.Dispose()
 })
 #endregion
 
@@ -1608,9 +1759,24 @@ $btnAssign.Add_Click({
         $global:form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor; Write-Log "Assigning $ph to $upn ($type)..."; 
         Set-CsPhoneNumberAssignment -Identity $upn -PhoneNumber $ph -PhoneNumberType $type -ErrorAction Stop; Write-Log "Teams Assignment Successful."
         $row.Cells["UserPrincipalName"].Value = $userObj.UserPrincipalName; $row.Cells["DisplayName"].Value = $userObj.DisplayName; $row.Cells["ActivationState"].Value = "Assigned"
-        Write-Log "Syncing to On-Prem AD..."; try { $safeUpn = $upn.Replace("'", "''"); $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeUpn'" -ErrorAction Stop; if ($adUser) { Set-ADUser -Identity $adUser -OfficePhone $ph -ErrorAction Stop; Write-Log "AD OfficePhone updated for $upn." } } catch { Write-Log "AD Sync Warning: $($_.Exception.Message)" }
-        Update-TagStatistics # Update stats
-    } catch { Write-Log "Assignment Failed: $($_.Exception.Message)"; [System.Windows.Forms.MessageBox]::Show("Assignment Failed: $($_.Exception.Message)", "Error") } finally { $global:form.Cursor = [System.Windows.Forms.Cursors]::Default }
+        Write-Log "Syncing to On-Prem AD..."
+        try {
+            $safeUpn = $upn.Replace("'", "''")
+            $adUser = Get-ADUser -Filter "UserPrincipalName -eq '$safeUpn'" -ErrorAction Stop
+            if ($adUser) {
+                Set-ADUser -Identity $adUser -OfficePhone $ph -ErrorAction Stop
+                Write-Log "AD OfficePhone updated for $upn."
+            }
+        } catch {
+            Write-Log "AD Sync Warning: $($_.Exception.Message)"
+        }
+        Update-TagStatistics
+    } catch {
+        Write-Log "Assignment Failed: $($_.Exception.Message)"
+        [System.Windows.Forms.MessageBox]::Show("Assignment Failed: $($_.Exception.Message)", "Error")
+    } finally {
+        $global:form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
 })
 
 $btnReleaseOC.Add_Click({
@@ -1658,9 +1824,23 @@ $btnReleaseOC.Add_Click({
                     Write-Log "AD Sync Warning: $($_.Exception.Message)"
                 }
 
-            } catch { $errMsg = $_.Exception.Message; if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") { Write-Log "Detected On-Prem user. Clearing AD attributes..."; try { Set-ADUser -Identity $upn -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop; Write-Log "Success: AD attributes cleared." } catch { Write-Log "Failed to clear AD attributes: $($_.Exception.Message)." } } else { Write-Log "Failed unassign: ${phone}: $errMsg" }; continue } }
+            } catch {
+                $errMsg = $_.Exception.Message
+                if ($errMsg -match "on-premises Active Directory" -or $errMsg -match "synchronized to the cloud") {
+                    Write-Log "Detected On-Prem user. Clearing AD attributes..."
+                    try {
+                        Set-ADUser -Identity $upn -Clear "msRTCSIP-Line", "telephoneNumber" -ErrorAction Stop
+                        Write-Log "Success: AD attributes cleared."
+                    } catch {
+                        Write-Log "Failed to clear AD attributes: $($_.Exception.Message)."
+                    }
+                } else {
+                    Write-Log "Failed unassign: ${phone}: $errMsg"
+                }
+                continue
+            } }
     }
-    
+
     Update-ProgressUI -Current 0 -Total 100 -Activity "Releasing from OC"
     $successfulRows = Unpublish-OrangeNumbersBatch -RowObjects $rowsToProcess
     
@@ -1767,8 +1947,21 @@ $btnManualPublish.Add_Click({
     }
 })
 
-$dataGridView.Add_CellFormatting({ param($s,$e) if($e.ColumnIndex -ge 0 -and $dataGridView.Columns[$e.ColumnIndex].Name -match "^Orange") { $e.CellStyle.BackColor = [System.Drawing.Color]::Bisque } })
-$dataGridView.Add_CellDoubleClick({ param($s,$e) if($e.RowIndex -ge 0){ $p=$dataGridView.Rows[$e.RowIndex].Cells["TelephoneNumber"].Value; Write-Log "-- $p --"; if($global:orangeHistoryMap[$p]){$global:orangeHistoryMap[$p] | ForEach-Object {Write-Log "$($_.date) | $($_.status)"}} } })
+$dataGridView.Add_CellFormatting({ param($s, $e)
+    if ($e.ColumnIndex -ge 0 -and $dataGridView.Columns[$e.ColumnIndex].Name -match "^Orange") {
+        $e.CellStyle.BackColor = [System.Drawing.Color]::Bisque
+    }
+})
+
+$dataGridView.Add_CellDoubleClick({ param($s, $e)
+    if ($e.RowIndex -ge 0) {
+        $p = $dataGridView.Rows[$e.RowIndex].Cells["TelephoneNumber"].Value
+        Write-Log "-- $p --"
+        if ($global:orangeHistoryMap[$p]) {
+            $global:orangeHistoryMap[$p] | ForEach-Object { Write-Log "$($_.date) | $($_.status)" }
+        }
+    }
+})
 #endregion
 
 #region 13. Logic - Tagging Operations
@@ -1786,12 +1979,47 @@ $btnApplyTag.Add_Click({
         
         $ph = $r.Cells["TelephoneNumber"].Value; $currentTagStr = [string]$r.Cells["Tag"].Value
         if ([string]::IsNullOrWhiteSpace($currentTagStr)) { $currentTags = @() } else { $currentTags = $currentTagStr -split "," | ForEach-Object { $_.Trim() } }
-        $tagsToRemove = @(); $tagsToAdd = @()
+        $tagsToRemove = @()
+        $tagsToAdd = @()
+
+        # Determine location tag swap
         $newLocationTag = $desiredTags | Where-Object { $global:allowedTags -contains $_ } | Select-Object -First 1
-        if ($newLocationTag) { $oldLocationTag = $currentTags | Where-Object { $global:allowedTags -contains $_ } | Select-Object -First 1; if ($oldLocationTag -and $oldLocationTag -ne $newLocationTag) { $tagsToRemove += $oldLocationTag } }
-        $specialTags = @("Blacklist", "Reserved", "Premium"); foreach ($st in $specialTags) { $isDesired = $desiredTags -contains $st; $isCurrent = $currentTags -contains $st; if ($isCurrent -and -not $isDesired) { $tagsToRemove += $st }; if ($isDesired -and -not $isCurrent) { $tagsToAdd += $st } }
-        if ($newLocationTag) { if (-not ($currentTags -contains $newLocationTag)) { $tagsToAdd += $newLocationTag } }
-        try { foreach ($t in $tagsToRemove) { Write-Log "Removing tag '$t' from $ph..."; Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; foreach ($t in $tagsToAdd) { Write-Log "Adding tag '$t' to $ph..."; Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop }; $finalTags = $currentTags | Where-Object { -not ($tagsToRemove -contains $_) }; $finalTags += $tagsToAdd; $r.Cells["Tag"].Value = ($finalTags | Sort-Object | Get-Unique) -join ", "; if ($tagsToAdd.Count -eq 0 -and $tagsToRemove.Count -eq 0) { Write-Log "No tag changes needed for $ph." } else { Write-Log "Tags updated for $ph." } } catch { Write-Log "Failed to update tags for ${ph}: $($_.Exception.Message)" }
+        if ($newLocationTag) {
+            $oldLocationTag = $currentTags | Where-Object { $global:allowedTags -contains $_ } | Select-Object -First 1
+            if ($oldLocationTag -and $oldLocationTag -ne $newLocationTag) { $tagsToRemove += $oldLocationTag }
+            if (-not ($currentTags -contains $newLocationTag)) { $tagsToAdd += $newLocationTag }
+        }
+
+        # Determine special tag changes
+        $specialTags = @("Blacklist", "Reserved", "Premium")
+        foreach ($st in $specialTags) {
+            $isDesired = $desiredTags -contains $st
+            $isCurrent = $currentTags -contains $st
+            if ($isCurrent -and -not $isDesired) { $tagsToRemove += $st }
+            if ($isDesired -and -not $isCurrent) { $tagsToAdd += $st }
+        }
+
+        # Apply tag changes via API
+        try {
+            foreach ($t in $tagsToRemove) {
+                Write-Log "Removing tag '$t' from $ph..."
+                Remove-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop
+            }
+            foreach ($t in $tagsToAdd) {
+                Write-Log "Adding tag '$t' to $ph..."
+                Set-CsPhoneNumberTag -PhoneNumber $ph -Tag $t -ErrorAction Stop
+            }
+            $finalTags = $currentTags | Where-Object { -not ($tagsToRemove -contains $_) }
+            $finalTags += $tagsToAdd
+            $r.Cells["Tag"].Value = ($finalTags | Sort-Object | Get-Unique) -join ", "
+            if ($tagsToAdd.Count -eq 0 -and $tagsToRemove.Count -eq 0) {
+                Write-Log "No tag changes needed for $ph."
+            } else {
+                Write-Log "Tags updated for $ph."
+            }
+        } catch {
+            Write-Log "Failed to update tags for ${ph}: $($_.Exception.Message)"
+        }
     }
     Update-SelectedRows -Rows $sel
     Update-TagStatistics # Update stats
