@@ -1,5 +1,5 @@
 # =============================================================================
-# TEAMS PHONE MANAGER v57.0 (UI Polish & Modernization)
+# TEAMS / ORANGE BTD PHONE MANAGER
 # =============================================================================
 
 #region 1. Cleanup & Assemblies
